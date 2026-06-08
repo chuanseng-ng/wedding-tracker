@@ -11,8 +11,9 @@ keep a running tally without a separate notebook.
 
 This codebase is "vibe-coded" with Claude — built through conversation rather than
 hand-written from scratch. It works well for my use case, but treat it as a
-weekend-project tool rather than production-grade software (see the security caveats
-below, especially around the PIN).
+weekend-project tool rather than production-grade software. Access is gated by a
+server-verified helper sign-in and the database is locked down with Row Level
+Security — see [`SECURITY.md`](SECURITY.md) for the threat model and residual risks.
 
 ---
 
@@ -58,27 +59,38 @@ Clear the contents of `src/index.css` (the app has its own styles built in).
 2. Click **New Query**
 3. Paste the following and click **Run** (or press `Ctrl+Enter` / `Cmd+Enter`):
 
+Paste the contents of [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql)
+(in this repo). It creates the `guests` table with integrity constraints and —
+importantly — **locks Row Level Security to signed-in helpers only**:
+
 ```sql
-create table guests (
-  id uuid default gen_random_uuid() primary key,
-  name text,
-  table_number text,
-  checked_in boolean default false,
-  checked_in_at timestamptz,
-  angbao_given boolean default false,
-  angbao_amount numeric default 0,
-  notes text,
-  is_vip boolean default false,
-  party text default ''
-);
+alter table public.guests enable row level security;
 
-alter table guests enable row level security;
-
-create policy "public" on guests
-  for all using (true) with check (true);
+-- Authenticated helpers get full access; the anonymous role has NO policy,
+-- so the public anon key alone cannot read or modify any data.
+create policy "helpers_select" on public.guests for select to authenticated using (true);
+create policy "helpers_insert" on public.guests for insert to authenticated with check (true);
+create policy "helpers_update" on public.guests for update to authenticated using (true) with check (true);
+create policy "helpers_delete" on public.guests for delete to authenticated using (true);
 ```
 
+> ⚠️ **Do not use a `for all using (true) with check (true)` policy.** That makes
+> the entire guest list publicly readable, writable, and deletable by anyone who
+> has the anon key (which ships in the browser bundle). The migration above is the
+> secure replacement.
+
 You should see **"Success. No rows returned"** at the bottom — this means it worked.
+
+### 2.2a Create the Helper Login
+
+The app is unlocked by signing in to a single shared account (verified by
+Supabase Auth on the server — see Step 4).
+
+1. In the left sidebar, go to **Authentication → Users → Add user**.
+2. Create one user, e.g. email `helpers@wedding.local` with a strong password —
+   this password is the **access code** you'll share with your helpers.
+3. Go to **Authentication → Providers → Email** and **turn off "Allow new users
+   to sign up"** so strangers can't self-register an account.
 
 ### 2.3 Get Your API Keys
 
@@ -106,7 +118,12 @@ and **anon public key** from step 2.3:
 ```
 VITE_SUPABASE_URL=https://xxxxxxxxxxxx.supabase.co
 VITE_SUPABASE_ANON_KEY=eyJ...your anon key here...
+VITE_HELPER_EMAIL=helpers@wedding.local
 ```
+
+`VITE_HELPER_EMAIL` must match the email of the helper account you created in
+step 2.2a. It is **not** a secret — only the account's password (the access code
+your helpers type in) is.
 
 Then open `src/App.jsx` and make sure the top two lines read:
 
@@ -125,46 +142,39 @@ Make sure your `.env` file is never committed to GitHub. Open `.gitignore` and c
 
 ---
 
-## Step 4 — Configure the App
+## Step 4 — How Access Control Works
 
-Near the top of `src/App.jsx`, in the `PIN LOCK` section, you can customise the PIN:
+The app is unlocked by signing in to the shared helper account you created in
+step 2.2a. On the unlock screen, helpers type the account **password** (the
+"access code"); the app calls Supabase Auth's `signInWithPassword` and the
+credential is verified **on the server**. Nothing to configure in `src/App.jsx` —
+just set `VITE_HELPER_EMAIL` to match the account.
 
-```js
-const CORRECT_PIN = "1234"; // ← Change to your desired PIN
-```
+Share the access code (the password) with your helpers however you'd normally
+share a private password.
 
-All helpers will use this PIN to access the app on the wedding day.
-
-> ## ⚠️ READ THIS BEFORE YOU RELY ON THE PIN ⚠️
+> ### ✅ This is real, server-side access control
 >
-> **The PIN is a soft deterrent, not real security. Use it at your own risk.**
+> Earlier versions of this app used a 4-digit PIN compared in the browser. That
+> was a "soft deterrent" only — anyone could read the PIN out of the JavaScript
+> bundle via DevTools, and (because of the open database policy) read or delete
+> the entire guest list directly through the Supabase API without even loading
+> the app.
 >
-> This app is a static frontend with no backend of its own — everything runs in the
-> visitor's browser. That means:
+> The current design fixes both problems:
 >
-> - **The PIN is checked entirely client-side.** Anyone who opens browser DevTools
->   (`F12` → Sources, or just "View Page Source" on the deployed bundle) can read the
->   PIN directly out of the JavaScript that gets sent to their browser. There is no way
->   to hide it from a determined visitor — this is true whether the PIN is hardcoded as
->   a string (as it is now) **or** moved into an environment variable
->   (e.g. `VITE_WEDDING_PIN`). Vite bakes `VITE_*` env vars into the public bundle at
->   build time, so the end result is the same either way: the value ships to every
->   browser that loads the page.
-> - **Putting the PIN in `.env` does *not* make it secret.** It only keeps it out of
->   your GitHub source code — it has zero effect on what a visitor can see once the
->   site is deployed.
-> - **Why does this app even have a PIN, then?** Vercel's built-in **Password
->   Protection** (which *would* gate access at the server/edge level, before any code
->   reaches the browser) is a **paid Pro/Enterprise feature**. This in-app PIN exists
->   purely as a low-effort way to stop casual guests from stumbling onto the guest
->   list — not to stop anyone who actually wants to get in.
-> - **If you need real protection** (e.g. the guest list contains sensitive info you
->   don't want exposed under any circumstance), you'll need a server-side gate —
->   Vercel Password Protection, a Supabase Edge Function that checks the PIN before
->   returning data, or similar. That's beyond the scope of this simple tracker.
+> - **The access code is never in the bundle and never checked client-side.** It
+>   is the password of a Supabase Auth user, verified on the server. Only the
+>   non-secret helper *email* ships to the browser.
+> - **The database is locked to authenticated helpers.** Row Level Security grants
+>   access only to the `authenticated` role (see the migration in step 2.2), so an
+>   unauthenticated request with the public anon key is denied — it cannot read,
+>   insert, update, or delete anything.
 >
-> **Bottom line:** treat this PIN like a "please don't peek" sign on a door, not a
-> lock. Don't put anything in the guest list you'd be upset about a stranger seeing.
+> **Residual risk:** all helpers share one login, so anyone who learns the access
+> code has full access to the guest list. That suits a small group of trusted
+> helpers; for stronger isolation, create per-helper accounts. See
+> [`SECURITY.md`](SECURITY.md).
 
 ---
 
@@ -195,6 +205,7 @@ Go to [vercel.com](https://vercel.com) and sign up for free (use **Continue with
 |---|---|
 | `VITE_SUPABASE_URL` | your Supabase project URL |
 | `VITE_SUPABASE_ANON_KEY` | your Supabase anon key |
+| `VITE_HELPER_EMAIL` | email of the helper account (from step 2.2a) |
 
 ### 6.3 Deploy
 
@@ -211,7 +222,10 @@ Follow the prompts to link your account. For subsequent deployments after code c
 vercel --prod
 ```
 
-Your app will be live at a URL like `https://wedding-tracker-xxx.vercel.app`. Share this URL and the PIN with your helpers on the wedding day.
+Your app will be live at a URL like `https://wedding-tracker-xxx.vercel.app`. Share this URL and the access code (the helper account password) with your helpers on the wedding day.
+
+The included [`vercel.json`](vercel.json) adds security response headers (CSP,
+HSTS, `X-Frame-Options`, etc.) automatically on deploy.
 
 ---
 
@@ -260,7 +274,7 @@ To import: click **Import CSV** in the app toolbar, upload your file, and click 
 - **Angbao tracker** — log red packet given and amount per guest, with running total
 - **VIP guests** — starred and highlighted
 - **CSV import/export** — bulk import guest list; export final attendance report after the event
-- **PIN protection** — simple PIN screen to prevent unauthorised access
+- **Helper sign-in** — server-verified access code (Supabase Auth) gates the app; the database is locked to authenticated helpers via RLS
 - **Real-time multi-device sync** — all devices auto-sync every 5 seconds via Supabase
 - **Search & filter** — search by name or table; filter by arrived, pending, or angbao given
 
@@ -268,29 +282,32 @@ To import: click **Import CSV** in the app toolbar, upload your file, and click 
 
 ## Supabase Schema Reference
 
-If you ever need to recreate or modify the table, here is the full schema:
+The authoritative, version-controlled schema + RLS policies live in
+[`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql). Run that
+file to (re)create everything. Its shape:
 
 ```sql
--- Full table creation
-create table guests (
-  id uuid default gen_random_uuid() primary key,
-  name text,
-  table_number text,
-  checked_in boolean default false,
+create table public.guests (
+  id            uuid primary key default gen_random_uuid(),
+  name          text not null check (char_length(name) between 1 and 120),
+  table_number  text not null default '1' check (char_length(table_number) <= 20),
+  checked_in    boolean not null default false,
   checked_in_at timestamptz,
-  angbao_given boolean default false,
-  angbao_amount numeric default 0,
-  notes text,
-  is_vip boolean default false,
-  party text default ''
+  angbao_given  boolean not null default false,
+  angbao_amount numeric not null default 0 check (angbao_amount >= 0),
+  notes         text default '' check (char_length(coalesce(notes,'')) <= 500),
+  is_vip        boolean not null default false,
+  party         text not null default '' check (party in ('', 'bride', 'groom')),
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now()
 );
 
--- Enable Row Level Security
-alter table guests enable row level security;
-
--- Allow public read/write (protected by app PIN)
-create policy "public" on guests
-  for all using (true) with check (true);
+-- RLS: authenticated helpers only (anon has no policy → denied by default).
+alter table public.guests enable row level security;
+create policy "helpers_select" on public.guests for select to authenticated using (true);
+create policy "helpers_insert" on public.guests for insert to authenticated with check (true);
+create policy "helpers_update" on public.guests for update to authenticated using (true) with check (true);
+create policy "helpers_delete" on public.guests for delete to authenticated using (true);
 ```
 
 To verify your columns at any time, run:
