@@ -1,60 +1,48 @@
 import { useState, useEffect, useCallback } from "react";
+import { createClient } from "@supabase/supabase-js";
 
 // ─── SUPABASE CONFIG ──────────────────────────────────────────────────────────
 // Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your .env file
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-// ─── PIN LOCK (soft deterrent only — see README for important caveats) ───────
-const CORRECT_PIN = "1234"; // ← Change this to your wedding PIN
+// Shared sign-in identity for wedding-day helpers. The PASSWORD is never stored
+// in the bundle — helpers type it on the unlock screen and Supabase Auth
+// verifies it on the server. Only the (non-secret) email lives in config.
+const HELPER_EMAIL = import.meta.env.VITE_HELPER_EMAIL || "helpers@wedding.local";
 
+const isDemoMode = !SUPABASE_URL || !SUPABASE_ANON_KEY;
 
-// ─── SUPABASE CLIENT (no SDK needed — raw fetch) ──────────────────────────────
-const sb = {
-  async select(table, query = "") {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${query}&order=name.asc`, {
-      headers: {
-        apikey: SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-        "Content-Type": "application/json",
-      },
+// ─── SUPABASE CLIENT (official SDK) ───────────────────────────────────────────
+// The SDK manages the auth session + token refresh and builds queries safely
+// (user input is never string-interpolated into a request URL). All data access
+// runs as the signed-in helper, so RLS (authenticated-only) is the real gate.
+const supabase = isDemoMode
+  ? null
+  : createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: { persistSession: true, autoRefreshToken: true },
     });
-    return res.json();
+
+// Thin wrapper preserving the original call sites used throughout the app.
+const sb = {
+  async select(table) {
+    const { data, error } = await supabase.from(table).select("*").order("name", { ascending: true });
+    if (error) throw error;
+    return data;
   },
   async insert(table, data) {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
-      method: "POST",
-      headers: {
-        apikey: SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-        "Content-Type": "application/json",
-        Prefer: "return=representation",
-      },
-      body: JSON.stringify(data),
-    });
-    return res.json();
+    const { data: rows, error } = await supabase.from(table).insert(data).select();
+    if (error) throw error;
+    return rows;
   },
   async update(table, id, data) {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?id=eq.${id}`, {
-      method: "PATCH",
-      headers: {
-        apikey: SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-        "Content-Type": "application/json",
-        Prefer: "return=representation",
-      },
-      body: JSON.stringify(data),
-    });
-    return res.json();
+    const { data: rows, error } = await supabase.from(table).update(data).eq("id", id).select();
+    if (error) throw error;
+    return rows;
   },
   async delete(table, id) {
-    await fetch(`${SUPABASE_URL}/rest/v1/${table}?id=eq.${id}`, {
-      method: "DELETE",
-      headers: {
-        apikey: SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-      },
-    });
+    const { error } = await supabase.from(table).delete().eq("id", id);
+    if (error) throw error;
   },
   subscribeToChanges(table, callback) {
     // Polling fallback for real-time (works without Supabase Realtime setup)
@@ -75,7 +63,23 @@ const DEMO_GUESTS = [
   { id: 8, name: "David Koh", table_number: 4, checked_in: true, checked_in_at: "2024-06-15T18:50:00", angbao_given: true, angbao_amount: 300, notes: "Boss", is_vip: true },
 ];
 
-const isDemoMode = !SUPABASE_URL || !SUPABASE_ANON_KEY;
+// ─── INPUT VALIDATION ─────────────────────────────────────────────────────────
+// Client-side hygiene for fast feedback; the database CHECK constraints
+// (see supabase/migrations) are the authoritative enforcement.
+const MAX_NAME = 120, MAX_NOTES = 500, MAX_TABLE = 20, MAX_ANGBAO = 10_000_000;
+const PARTIES = ["", "bride", "groom"];
+
+const cleanName = (v) => String(v ?? "").trim().slice(0, MAX_NAME);
+const cleanNotes = (v) => String(v ?? "").trim().slice(0, MAX_NOTES);
+const cleanTable = (v) => String(v ?? "").trim().slice(0, MAX_TABLE) || "1";
+const cleanParty = (v) => {
+  const p = String(v ?? "").toLowerCase().trim();
+  return PARTIES.includes(p) ? p : "";
+};
+const cleanAmount = (v) => {
+  const n = parseFloat(v);
+  return Number.isFinite(n) && n > 0 ? Math.min(n, MAX_ANGBAO) : 0;
+};
 
 // ─── CSV PARSER ───────────────────────────────────────────────────────────────
 function parseCSV(text) {
@@ -93,16 +97,15 @@ function parseCSV(text) {
     vals.push(cur.trim());
     const obj = {};
     headers.forEach((h, i) => (obj[h] = vals[i] || ""));
-    const rawTable = obj.table || obj.table_number || obj.table_no || "1";
     return {
-      name: obj.name || obj.guest_name || obj.guest || "",
-      table_number: rawTable.trim() || "1",
+      name: cleanName(obj.name || obj.guest_name || obj.guest),
+      table_number: cleanTable(obj.table || obj.table_number || obj.table_no),
       checked_in: false,
       checked_in_at: null,
       angbao_given: false,
       angbao_amount: 0,
-      notes: obj.notes || obj.note || obj.dietary || "",
-      party: (obj.party || "").toLowerCase().trim(),
+      notes: cleanNotes(obj.notes || obj.note || obj.dietary),
+      party: cleanParty(obj.party),
       is_vip: (obj.vip || "").toLowerCase() === "true" || (obj.vip || "") === "1",
     };
   }).filter((g) => g.name);
@@ -379,6 +382,17 @@ const styles = `
   .pin-key.del { font-size: 18px; color: rgba(255,255,255,0.4); }
   .pin-key.del:hover { color: white; }
   .pin-error { font-size: 13px; color: #f1948a; letter-spacing: 0.05em; min-height: 20px; }
+  .pin-input {
+    width: 100%; padding: 14px 16px; border-radius: 12px; box-sizing: border-box;
+    background: rgba(255,255,255,0.06); border: 1.5px solid rgba(201,168,76,0.25);
+    color: white; font-size: 16px; letter-spacing: 0.1em; text-align: center; outline: none;
+  }
+  .pin-input:focus { border-color: var(--gold); }
+  .pin-unlock {
+    width: 100%; padding: 14px; border-radius: 12px; border: none; cursor: pointer;
+    background: var(--gold); color: #1a1a1a; font-size: 15px; font-weight: 500; letter-spacing: 0.05em;
+  }
+  .pin-unlock:disabled { opacity: 0.5; cursor: default; }
 
   /* GUEST QUICK POPUP */
   .table-guest-name-btn {
@@ -527,10 +541,10 @@ const styles = `
 
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 export default function WeddingTracker() {
-  const [unlocked, setUnlocked] = useState(() => sessionStorage.getItem("wedding_pin") === CORRECT_PIN);
-  const [pin, setPin] = useState("");
+  const [unlocked, setUnlocked] = useState(isDemoMode);
+  const [accessCode, setAccessCode] = useState("");
   const [pinError, setPinError] = useState("");
-  const [pinShake, setPinShake] = useState(false);
+  const [unlocking, setUnlocking] = useState(false);
   const [guests, setGuests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -544,26 +558,33 @@ export default function WeddingTracker() {
   const [syncing, setSyncing] = useState(false);
   const [activePopup, setActivePopup] = useState(null); // guest id
 
-  const handlePinKey = (key) => {
-    if (pin.length >= 4) return;
-    const next = pin + key;
-    setPin(next);
-    setPinError("");
-    if (next.length === 4) {
-      if (next === CORRECT_PIN) {
-        sessionStorage.setItem("wedding_pin", next);
-        setUnlocked(true);
-      } else {
-        setPinShake(true);
-        setPinError("Incorrect PIN, try again");
-        setTimeout(() => { setPin(""); setPinShake(false); }, 600);
-      }
-    }
-  };
+  // Restore an existing helper session on load (Supabase persists it).
+  useEffect(() => {
+    if (isDemoMode) return;
+    supabase.auth.getSession().then(({ data }) => {
+      if (data.session) setUnlocked(true);
+    });
+  }, []);
 
-  const handlePinDelete = () => {
-    setPin((p) => p.slice(0, -1));
+  const unlock = async (e) => {
+    e?.preventDefault?.();
+    if (isDemoMode) { setUnlocked(true); return; }
+    if (!accessCode || unlocking) return;
+    setUnlocking(true);
     setPinError("");
+    // The access code is verified server-side by Supabase Auth — it is never
+    // compared in the browser and never shipped in the bundle.
+    const { error } = await supabase.auth.signInWithPassword({
+      email: HELPER_EMAIL,
+      password: accessCode,
+    });
+    setUnlocking(false);
+    if (error) {
+      setPinError("Incorrect access code, try again");
+      setAccessCode("");
+    } else {
+      setUnlocked(true);
+    }
   };
 
   const showToast = (msg) => {
@@ -588,18 +609,24 @@ export default function WeddingTracker() {
     try {
       const data = await sb.select("guests");
       if (Array.isArray(data)) setGuests(data);
-    } catch (e) {
+    } catch {
       showToast("Failed to load guests");
     }
     setLoading(false);
   }, []);
 
   useEffect(() => {
+    // Initial fetch on mount, then poll for changes.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadGuests();
     // Real-time polling
     const unsub = sb.subscribeToChanges("guests", loadGuests);
     return unsub;
   }, [loadGuests]);
+
+  // On a failed write, tell the user and re-sync from the server so the
+  // optimistic UI does not drift away from the source of truth.
+  const syncFail = (msg) => { showToast(msg || "Sync failed — check connection"); loadGuests(); };
 
   // Toggle check-in
   const toggleCheckIn = async (guest) => {
@@ -611,7 +638,9 @@ export default function WeddingTracker() {
     };
     setGuests((g) => g.map((x) => (x.id === guest.id ? updated : x)));
     if (!isDemoMode) {
-      await sb.update("guests", guest.id, { checked_in: updated.checked_in, checked_in_at: updated.checked_in_at });
+      try {
+        await sb.update("guests", guest.id, { checked_in: updated.checked_in, checked_in_at: updated.checked_in_at });
+      } catch { return syncFail(); }
     }
     showToast(updated.checked_in ? `✓ ${guest.name} checked in` : `${guest.name} unchecked`);
   };
@@ -621,45 +650,57 @@ export default function WeddingTracker() {
     const updated = { ...guest, angbao_given: !guest.angbao_given };
     if (!updated.angbao_given) updated.angbao_amount = 0;
     setGuests((g) => g.map((x) => (x.id === guest.id ? updated : x)));
-    if (!isDemoMode) await sb.update("guests", guest.id, { angbao_given: updated.angbao_given, angbao_amount: updated.angbao_amount });
+    if (!isDemoMode) {
+      try {
+        await sb.update("guests", guest.id, { angbao_given: updated.angbao_given, angbao_amount: updated.angbao_amount });
+      } catch { syncFail(); }
+    }
   };
 
   // Update angbao amount
   const updateAmount = async (guest, amount) => {
-    const val = parseFloat(amount) || 0;
+    const val = cleanAmount(amount);
     const updated = { ...guest, angbao_amount: val };
     setGuests((g) => g.map((x) => (x.id === guest.id ? updated : x)));
-    if (!isDemoMode) await sb.update("guests", guest.id, { angbao_amount: val });
+    if (!isDemoMode) {
+      try {
+        await sb.update("guests", guest.id, { angbao_amount: val });
+      } catch { syncFail(); }
+    }
   };
 
   // Save guest (add/edit)
   const saveGuest = async () => {
-    if (!form.name.trim()) return;
+    if (!cleanName(form.name)) return;
     const data = {
-      name: form.name.trim(),
-      table_number: parseInt(form.table_number) || 1,
-      notes: form.notes,
-      party: form.party || "",
+      name: cleanName(form.name),
+      table_number: cleanTable(form.table_number),
+      notes: cleanNotes(form.notes),
+      party: cleanParty(form.party),
       is_vip: form.is_vip,
       checked_in: editGuest?.checked_in || false,
       checked_in_at: editGuest?.checked_in_at || null,
       angbao_given: editGuest?.angbao_given || false,
       angbao_amount: editGuest?.angbao_amount || 0,
     };
-    if (editGuest) {
-      const updated = { ...editGuest, ...data };
-      setGuests((g) => g.map((x) => (x.id === editGuest.id ? updated : x)));
-      if (!isDemoMode) await sb.update("guests", editGuest.id, data);
-      showToast("Guest updated");
-    } else {
-      const newGuest = { ...data, id: isDemoMode ? Date.now() : undefined };
-      if (!isDemoMode) {
-        const res = await sb.insert("guests", data);
-        if (Array.isArray(res)) setGuests((g) => [...g, res[0]]);
+    try {
+      if (editGuest) {
+        const updated = { ...editGuest, ...data };
+        setGuests((g) => g.map((x) => (x.id === editGuest.id ? updated : x)));
+        if (!isDemoMode) await sb.update("guests", editGuest.id, data);
+        showToast("Guest updated");
       } else {
-        setGuests((g) => [...g, newGuest]);
+        const newGuest = { ...data, id: isDemoMode ? Date.now() : undefined };
+        if (!isDemoMode) {
+          const res = await sb.insert("guests", data);
+          if (Array.isArray(res)) setGuests((g) => [...g, res[0]]);
+        } else {
+          setGuests((g) => [...g, newGuest]);
+        }
+        showToast("Guest added");
       }
-      showToast("Guest added");
+    } catch {
+      return syncFail("Could not save guest — check connection");
     }
     setModal(null);
     setEditGuest(null);
@@ -670,7 +711,11 @@ export default function WeddingTracker() {
   const deleteGuest = async (guest) => {
     if (!confirm(`Remove ${guest.name}?`)) return;
     setGuests((g) => g.filter((x) => x.id !== guest.id));
-    if (!isDemoMode) await sb.delete("guests", guest.id);
+    if (!isDemoMode) {
+      try {
+        await sb.delete("guests", guest.id);
+      } catch { return syncFail("Could not remove guest — check connection"); }
+    }
     showToast("Guest removed");
   };
 
@@ -683,8 +728,13 @@ export default function WeddingTracker() {
       setGuests((prev) => [...prev, ...newGuests]);
     } else {
       setSyncing(true);
-      for (const g of parsed) await sb.insert("guests", g);
-      await loadGuests();
+      try {
+        for (const g of parsed) await sb.insert("guests", g);
+        await loadGuests();
+      } catch {
+        setSyncing(false);
+        return syncFail("CSV import failed partway — check connection");
+      }
       setSyncing(false);
     }
     setModal(null);
@@ -752,23 +802,22 @@ export default function WeddingTracker() {
         <div className="pin-screen">
           <div className="pin-logo">♡ Wedding Day</div>
           <div className="pin-sub">Guest Attendance Tracker</div>
-          <div className="pin-box">
-            <div className="pin-label">Enter PIN to continue</div>
-            <div className="pin-dots">
-              {[0,1,2,3].map((i) => (
-                <div key={i} className={`pin-dot ${pin.length > i ? (pinShake ? "error" : "filled") : ""}`} />
-              ))}
-            </div>
-            <div className="pin-keypad">
-              {[1,2,3,4,5,6,7,8,9].map((n) => (
-                <button key={n} className="pin-key" onClick={() => handlePinKey(String(n))}>{n}</button>
-              ))}
-              <div />
-              <button className="pin-key" onClick={() => handlePinKey("0")}>0</button>
-              <button className="pin-key del" onClick={handlePinDelete}>⌫</button>
-            </div>
+          <form className="pin-box" onSubmit={unlock}>
+            <div className="pin-label">Enter access code to continue</div>
+            <input
+              className="pin-input"
+              type="password"
+              autoFocus
+              value={accessCode}
+              onChange={(e) => { setAccessCode(e.target.value); setPinError(""); }}
+              placeholder="Access code"
+              autoComplete="current-password"
+            />
+            <button type="submit" className="pin-unlock" disabled={unlocking || !accessCode}>
+              {unlocking ? "Checking…" : "Unlock"}
+            </button>
             <div className="pin-error">{pinError}</div>
-          </div>
+          </form>
         </div>
       </>
     );
