@@ -1,60 +1,51 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { createClient } from "@supabase/supabase-js";
+import { cleanName, cleanNotes, cleanTable, cleanParty, cleanAmount } from "./lib/validation.js";
+import { parseCSV, toCSV } from "./lib/csv.js";
+import { formatTime } from "./lib/format.js";
 
 // ─── SUPABASE CONFIG ──────────────────────────────────────────────────────────
 // Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your .env file
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-// ─── PIN LOCK (soft deterrent only — see README for important caveats) ───────
-const CORRECT_PIN = "1234"; // ← Change this to your wedding PIN
+// Shared sign-in identity for wedding-day helpers. The PASSWORD is never stored
+// in the bundle — helpers type it on the unlock screen and Supabase Auth
+// verifies it on the server. Only the (non-secret) email lives in config.
+const HELPER_EMAIL = import.meta.env.VITE_HELPER_EMAIL || "helpers@wedding.local";
 
+const isDemoMode = !SUPABASE_URL || !SUPABASE_ANON_KEY;
 
-// ─── SUPABASE CLIENT (no SDK needed — raw fetch) ──────────────────────────────
-const sb = {
-  async select(table, query = "") {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${query}&order=name.asc`, {
-      headers: {
-        apikey: SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-        "Content-Type": "application/json",
-      },
+// ─── SUPABASE CLIENT (official SDK) ───────────────────────────────────────────
+// The SDK manages the auth session + token refresh and builds queries safely
+// (user input is never string-interpolated into a request URL). All data access
+// runs as the signed-in helper, so RLS (authenticated-only) is the real gate.
+const supabase = isDemoMode
+  ? null
+  : createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: { persistSession: true, autoRefreshToken: true },
     });
-    return res.json();
+
+// Thin wrapper preserving the original call sites used throughout the app.
+const sb = {
+  async select(table) {
+    const { data, error } = await supabase.from(table).select("*").order("name", { ascending: true });
+    if (error) throw error;
+    return data;
   },
   async insert(table, data) {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
-      method: "POST",
-      headers: {
-        apikey: SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-        "Content-Type": "application/json",
-        Prefer: "return=representation",
-      },
-      body: JSON.stringify(data),
-    });
-    return res.json();
+    const { data: rows, error } = await supabase.from(table).insert(data).select();
+    if (error) throw error;
+    return rows;
   },
   async update(table, id, data) {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?id=eq.${id}`, {
-      method: "PATCH",
-      headers: {
-        apikey: SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-        "Content-Type": "application/json",
-        Prefer: "return=representation",
-      },
-      body: JSON.stringify(data),
-    });
-    return res.json();
+    const { data: rows, error } = await supabase.from(table).update(data).eq("id", id).select();
+    if (error) throw error;
+    return rows;
   },
   async delete(table, id) {
-    await fetch(`${SUPABASE_URL}/rest/v1/${table}?id=eq.${id}`, {
-      method: "DELETE",
-      headers: {
-        apikey: SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-      },
-    });
+    const { error } = await supabase.from(table).delete().eq("id", id);
+    if (error) throw error;
   },
   subscribeToChanges(table, callback) {
     // Polling fallback for real-time (works without Supabase Realtime setup)
@@ -74,39 +65,6 @@ const DEMO_GUESTS = [
   { id: 7, name: "Siti Rahimah", table_number: 4, checked_in: false, checked_in_at: null, angbao_given: false, angbao_amount: 0, notes: "", is_vip: false },
   { id: 8, name: "David Koh", table_number: 4, checked_in: true, checked_in_at: "2024-06-15T18:50:00", angbao_given: true, angbao_amount: 300, notes: "Boss", is_vip: true },
 ];
-
-const isDemoMode = !SUPABASE_URL || !SUPABASE_ANON_KEY;
-
-// ─── CSV PARSER ───────────────────────────────────────────────────────────────
-function parseCSV(text) {
-  const lines = text.trim().split("\n");
-  const headers = lines[0].split(",").map((h) => h.trim().toLowerCase().replace(/\s+/g, "_"));
-  return lines.slice(1).map((line) => {
-    // Handle commas inside quoted fields
-    const vals = [];
-    let cur = "", inQ = false;
-    for (let c of line) {
-      if (c === '"') inQ = !inQ;
-      else if (c === "," && !inQ) { vals.push(cur.trim()); cur = ""; }
-      else cur += c;
-    }
-    vals.push(cur.trim());
-    const obj = {};
-    headers.forEach((h, i) => (obj[h] = vals[i] || ""));
-    const rawTable = obj.table || obj.table_number || obj.table_no || "1";
-    return {
-      name: obj.name || obj.guest_name || obj.guest || "",
-      table_number: rawTable.trim() || "1",
-      checked_in: false,
-      checked_in_at: null,
-      angbao_given: false,
-      angbao_amount: 0,
-      notes: obj.notes || obj.note || obj.dietary || "",
-      party: (obj.party || "").toLowerCase().trim(),
-      is_vip: (obj.vip || "").toLowerCase() === "true" || (obj.vip || "") === "1",
-    };
-  }).filter((g) => g.name);
-}
 
 // ─── ICONS ────────────────────────────────────────────────────────────────────
 const Icon = {
@@ -286,7 +244,7 @@ const styles = `
   .guest-card.not-arrived { border-left: 3px solid rgba(201,168,76,0.3); }
 
   .checkin-btn {
-    width: 40px; height: 40px; border-radius: 50%; border: 2px solid;
+    width: 48px; height: 48px; border-radius: 50%; border: 2px solid;
     cursor: pointer; display: flex; align-items: center; justify-content: center;
     transition: all 0.2s; flex-shrink: 0;
   }
@@ -327,9 +285,9 @@ const styles = `
 
   .guest-actions { display: flex; gap: 4px; flex-shrink: 0; }
   .icon-btn {
-    width: 32px; height: 32px; border-radius: 6px; border: none; cursor: pointer;
+    width: 40px; height: 40px; border-radius: 6px; border: none; cursor: pointer;
     display: flex; align-items: center; justify-content: center;
-    background: transparent; color: var(--brown); opacity: 0.4;
+    background: transparent; color: var(--brown); opacity: 0.7;
     transition: all 0.15s;
   }
   .icon-btn svg { width: 14px; }
@@ -379,6 +337,17 @@ const styles = `
   .pin-key.del { font-size: 18px; color: rgba(255,255,255,0.4); }
   .pin-key.del:hover { color: white; }
   .pin-error { font-size: 13px; color: #f1948a; letter-spacing: 0.05em; min-height: 20px; }
+  .pin-input {
+    width: 100%; padding: 14px 16px; border-radius: 12px; box-sizing: border-box;
+    background: rgba(255,255,255,0.06); border: 1.5px solid rgba(201,168,76,0.25);
+    color: white; font-size: 16px; letter-spacing: 0.1em; text-align: center; outline: none;
+  }
+  .pin-input:focus { border-color: var(--gold); }
+  .pin-unlock {
+    width: 100%; padding: 14px; border-radius: 12px; border: none; cursor: pointer;
+    background: var(--gold); color: #1a1a1a; font-size: 15px; font-weight: 500; letter-spacing: 0.05em;
+  }
+  .pin-unlock:disabled { opacity: 0.5; cursor: default; }
 
   /* GUEST QUICK POPUP */
   .table-guest-name-btn {
@@ -388,7 +357,7 @@ const styles = `
   }
   .table-guest-name-btn:hover { background: var(--warm-white); color: var(--gold-dark); }
   .guest-quick-popup {
-    position: absolute; left: 0; top: calc(100%% + 4px);
+    position: absolute; left: 0; top: calc(100% + 4px);
     background: white; border-radius: 12px; padding: 16px;
     box-shadow: 0 8px 32px rgba(44,36,22,0.18);
     border: 1.5px solid rgba(201,168,76,0.2);
@@ -509,7 +478,16 @@ const styles = `
     box-shadow: 0 4px 20px rgba(0,0,0,0.2);
     z-index: 2000; animation: slideToast 0.2s ease;
     border-left: 3px solid var(--gold);
+    display: flex; align-items: center; gap: 16px;
   }
+  .toast-undo {
+    background: transparent; border: 1px solid var(--gold);
+    color: var(--gold-light); cursor: pointer;
+    font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 600;
+    padding: 4px 12px; border-radius: 6px; letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+  .toast-undo:hover { background: var(--gold); color: #1a1a1a; }
   @keyframes slideToast { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
 
   /* RESPONSIVE */
@@ -520,17 +498,24 @@ const styles = `
     .toolbar { padding: 12px 16px; }
     .content { padding: 16px; }
     .view-tabs { padding: 0 16px; }
-    .angbao-area { flex-direction: column; align-items: flex-end; }
     .angbao-header { flex-wrap: wrap; gap: 16px; }
+    /* Stack the guest card: check-in + name on top, actions wrap below,
+       so controls never overflow a single cramped row on a phone. */
+    .guest-card { flex-wrap: wrap; gap: 12px; }
+    .guest-info { flex-basis: calc(100% - 64px); }
+    .angbao-area { width: 100%; justify-content: space-between; }
+    .amount-input { width: 100%; max-width: 120px; }
+    .guest-actions { margin-left: auto; }
+    .toast { left: 16px; right: 16px; bottom: 16px; justify-content: space-between; }
   }
 `;
 
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 export default function WeddingTracker() {
-  const [unlocked, setUnlocked] = useState(() => sessionStorage.getItem("wedding_pin") === CORRECT_PIN);
-  const [pin, setPin] = useState("");
+  const [unlocked, setUnlocked] = useState(isDemoMode);
+  const [accessCode, setAccessCode] = useState("");
   const [pinError, setPinError] = useState("");
-  const [pinShake, setPinShake] = useState(false);
+  const [unlocking, setUnlocking] = useState(false);
   const [guests, setGuests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -544,31 +529,49 @@ export default function WeddingTracker() {
   const [syncing, setSyncing] = useState(false);
   const [activePopup, setActivePopup] = useState(null); // guest id
 
-  const handlePinKey = (key) => {
-    if (pin.length >= 4) return;
-    const next = pin + key;
-    setPin(next);
+  // Guests with an in-flight write (or a focused amount input) must not be
+  // overwritten by the 5-second poll, or a helper's keystrokes get clobbered.
+  const pendingIds = useRef(new Set());
+  const editingId = useRef(null);
+  // Debounce timers for angbao-amount persistence, keyed by guest id.
+  const amountTimers = useRef({});
+
+  // Restore an existing helper session on load (Supabase persists it).
+  useEffect(() => {
+    if (isDemoMode) return;
+    supabase.auth.getSession().then(({ data }) => {
+      if (data.session) setUnlocked(true);
+    });
+  }, []);
+
+  const unlock = async (e) => {
+    e?.preventDefault?.();
+    if (isDemoMode) { setUnlocked(true); return; }
+    if (!accessCode || unlocking) return;
+    setUnlocking(true);
     setPinError("");
-    if (next.length === 4) {
-      if (next === CORRECT_PIN) {
-        sessionStorage.setItem("wedding_pin", next);
-        setUnlocked(true);
-      } else {
-        setPinShake(true);
-        setPinError("Incorrect PIN, try again");
-        setTimeout(() => { setPin(""); setPinShake(false); }, 600);
-      }
+    // The access code is verified server-side by Supabase Auth — it is never
+    // compared in the browser and never shipped in the bundle.
+    const { error } = await supabase.auth.signInWithPassword({
+      email: HELPER_EMAIL,
+      password: accessCode,
+    });
+    setUnlocking(false);
+    if (error) {
+      setPinError("Incorrect access code, try again");
+      setAccessCode("");
+    } else {
+      setUnlocked(true);
     }
   };
 
-  const handlePinDelete = () => {
-    setPin((p) => p.slice(0, -1));
-    setPinError("");
-  };
-
-  const showToast = (msg) => {
-    setToast(msg);
-    setTimeout(() => setToast(null), 2500);
+  const toastTimer = useRef(null);
+  // Pass an onUndo callback to render an "Undo" button; undoable toasts linger
+  // a little longer so there is time to react.
+  const showToast = (message, onUndo = null) => {
+    clearTimeout(toastTimer.current);
+    setToast({ message, onUndo });
+    toastTimer.current = setTimeout(() => setToast(null), onUndo ? 5000 : 2500);
   };
 
   // Load guests
@@ -587,21 +590,57 @@ export default function WeddingTracker() {
     }
     try {
       const data = await sb.select("guests");
-      if (Array.isArray(data)) setGuests(data);
-    } catch (e) {
+      if (Array.isArray(data)) {
+        // Merge, don't replace: keep the local copy of any row that has a write
+        // in flight or whose amount field is focused, so the poll never wipes
+        // an in-progress edit. All other rows take the server's value.
+        setGuests((prev) =>
+          data.map((row) =>
+            pendingIds.current.has(row.id) || editingId.current === row.id
+              ? prev.find((p) => p.id === row.id) ?? row
+              : row
+          )
+        );
+      }
+    } catch {
       showToast("Failed to load guests");
     }
     setLoading(false);
   }, []);
 
   useEffect(() => {
+    // Initial fetch on mount, then poll for changes.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadGuests();
     // Real-time polling
     const unsub = sb.subscribeToChanges("guests", loadGuests);
     return unsub;
   }, [loadGuests]);
 
-  // Toggle check-in
+  // On a failed write, keep the optimistic value (don't yank it back — a wifi
+  // blip mid-tap shouldn't undo what the helper just did) and warn them. The
+  // next clean poll reconciles against the server.
+  const syncFail = (msg) => { showToast(msg || "Not saved — check connection"); };
+
+  // Optimistically apply `updated` to a guest, then persist `patch`. The id is
+  // held in pendingIds for the duration of the write so the poll won't clobber
+  // it (see loadGuests). Returns true on success.
+  const persist = async (id, patch, updated) => {
+    setGuests((g) => g.map((x) => (x.id === id ? updated : x)));
+    if (isDemoMode) return true;
+    pendingIds.current.add(id);
+    try {
+      await sb.update("guests", id, patch);
+      return true;
+    } catch {
+      syncFail();
+      return false;
+    } finally {
+      pendingIds.current.delete(id);
+    }
+  };
+
+  // Toggle check-in (undoable)
   const toggleCheckIn = async (guest) => {
     const now = new Date().toISOString();
     const updated = {
@@ -609,69 +648,125 @@ export default function WeddingTracker() {
       checked_in: !guest.checked_in,
       checked_in_at: !guest.checked_in ? now : null,
     };
-    setGuests((g) => g.map((x) => (x.id === guest.id ? updated : x)));
-    if (!isDemoMode) {
-      await sb.update("guests", guest.id, { checked_in: updated.checked_in, checked_in_at: updated.checked_in_at });
+    const ok = await persist(guest.id, { checked_in: updated.checked_in, checked_in_at: updated.checked_in_at }, updated);
+    if (ok) {
+      showToast(
+        updated.checked_in ? `✓ ${guest.name} checked in` : `${guest.name} unchecked`,
+        () => { setToast(null); persist(guest.id, { checked_in: guest.checked_in, checked_in_at: guest.checked_in_at }, guest); }
+      );
     }
-    showToast(updated.checked_in ? `✓ ${guest.name} checked in` : `${guest.name} unchecked`);
   };
 
-  // Toggle angbao
+  // Toggle angbao (undoable)
   const toggleAngbao = async (guest) => {
     const updated = { ...guest, angbao_given: !guest.angbao_given };
     if (!updated.angbao_given) updated.angbao_amount = 0;
-    setGuests((g) => g.map((x) => (x.id === guest.id ? updated : x)));
-    if (!isDemoMode) await sb.update("guests", guest.id, { angbao_given: updated.angbao_given, angbao_amount: updated.angbao_amount });
+    const ok = await persist(guest.id, { angbao_given: updated.angbao_given, angbao_amount: updated.angbao_amount }, updated);
+    if (ok) {
+      showToast(
+        updated.angbao_given ? `🧧 ${guest.name} — angbao received` : `${guest.name} — angbao cleared`,
+        () => { setToast(null); persist(guest.id, { angbao_given: guest.angbao_given, angbao_amount: guest.angbao_amount }, guest); }
+      );
+    }
   };
 
-  // Update angbao amount
-  const updateAmount = async (guest, amount) => {
-    const val = parseFloat(amount) || 0;
-    const updated = { ...guest, angbao_amount: val };
-    setGuests((g) => g.map((x) => (x.id === guest.id ? updated : x)));
-    if (!isDemoMode) await sb.update("guests", guest.id, { angbao_amount: val });
+  // Update angbao amount. Optimistic locally + debounced persist (~400ms) so a
+  // helper typing "200" fires one write, not three, and the poll can't eat
+  // keystrokes mid-type (id stays pending until the debounced write lands).
+  const updateAmount = (guest, amount) => {
+    const val = cleanAmount(amount);
+    setGuests((g) => g.map((x) => (x.id === guest.id ? { ...x, angbao_amount: val } : x)));
+    if (isDemoMode) return;
+    pendingIds.current.add(guest.id);
+    clearTimeout(amountTimers.current[guest.id]);
+    amountTimers.current[guest.id] = setTimeout(async () => {
+      try {
+        await sb.update("guests", guest.id, { angbao_amount: val });
+      } catch {
+        syncFail();
+      } finally {
+        pendingIds.current.delete(guest.id);
+      }
+    }, 400);
   };
 
   // Save guest (add/edit)
   const saveGuest = async () => {
-    if (!form.name.trim()) return;
+    if (!cleanName(form.name)) return;
     const data = {
-      name: form.name.trim(),
-      table_number: parseInt(form.table_number) || 1,
-      notes: form.notes,
-      party: form.party || "",
+      name: cleanName(form.name),
+      table_number: cleanTable(form.table_number),
+      notes: cleanNotes(form.notes),
+      party: cleanParty(form.party),
       is_vip: form.is_vip,
       checked_in: editGuest?.checked_in || false,
       checked_in_at: editGuest?.checked_in_at || null,
       angbao_given: editGuest?.angbao_given || false,
       angbao_amount: editGuest?.angbao_amount || 0,
     };
-    if (editGuest) {
-      const updated = { ...editGuest, ...data };
-      setGuests((g) => g.map((x) => (x.id === editGuest.id ? updated : x)));
-      if (!isDemoMode) await sb.update("guests", editGuest.id, data);
-      showToast("Guest updated");
-    } else {
-      const newGuest = { ...data, id: isDemoMode ? Date.now() : undefined };
-      if (!isDemoMode) {
-        const res = await sb.insert("guests", data);
-        if (Array.isArray(res)) setGuests((g) => [...g, res[0]]);
+    try {
+      if (editGuest) {
+        const updated = { ...editGuest, ...data };
+        setGuests((g) => g.map((x) => (x.id === editGuest.id ? updated : x)));
+        if (!isDemoMode) {
+          pendingIds.current.add(editGuest.id);
+          try { await sb.update("guests", editGuest.id, data); }
+          finally { pendingIds.current.delete(editGuest.id); }
+        }
+        showToast("Guest updated");
       } else {
-        setGuests((g) => [...g, newGuest]);
+        const newGuest = { ...data, id: isDemoMode ? Date.now() : undefined };
+        if (!isDemoMode) {
+          const res = await sb.insert("guests", data);
+          if (Array.isArray(res)) setGuests((g) => [...g, res[0]]);
+        } else {
+          setGuests((g) => [...g, newGuest]);
+        }
+        showToast("Guest added");
       }
-      showToast("Guest added");
+    } catch {
+      return syncFail("Could not save guest — check connection");
     }
     setModal(null);
     setEditGuest(null);
     setForm({ name: "", table_number: "", notes: "", party: "", is_vip: false });
   };
 
-  // Delete guest
+  // Delete guest — optimistic removal with an Undo toast (no blocking native
+  // confirm(), which is jarring in mobile in-app browsers).
   const deleteGuest = async (guest) => {
-    if (!confirm(`Remove ${guest.name}?`)) return;
+    setActivePopup(null);
     setGuests((g) => g.filter((x) => x.id !== guest.id));
-    if (!isDemoMode) await sb.delete("guests", guest.id);
-    showToast("Guest removed");
+    if (!isDemoMode) {
+      try {
+        await sb.delete("guests", guest.id);
+      } catch { return syncFail("Could not remove guest — check connection"); }
+    }
+    showToast(`${guest.name} removed`, () => undoDelete(guest));
+  };
+
+  // Undo a delete by re-inserting the guest (a new id is assigned by the DB).
+  const undoDelete = async (guest) => {
+    setToast(null);
+    const data = {
+      name: guest.name,
+      table_number: guest.table_number,
+      notes: guest.notes || "",
+      party: guest.party || "",
+      is_vip: guest.is_vip || false,
+      checked_in: guest.checked_in || false,
+      checked_in_at: guest.checked_in_at || null,
+      angbao_given: guest.angbao_given || false,
+      angbao_amount: guest.angbao_amount || 0,
+    };
+    if (isDemoMode) {
+      setGuests((g) => [...g, { ...data, id: Date.now() }]);
+      return;
+    }
+    try {
+      const res = await sb.insert("guests", data);
+      if (Array.isArray(res)) setGuests((g) => [...g, res[0]]);
+    } catch { syncFail("Could not restore guest — check connection"); }
   };
 
   // CSV import
@@ -683,8 +778,13 @@ export default function WeddingTracker() {
       setGuests((prev) => [...prev, ...newGuests]);
     } else {
       setSyncing(true);
-      for (const g of parsed) await sb.insert("guests", g);
-      await loadGuests();
+      try {
+        for (const g of parsed) await sb.insert("guests", g);
+        await loadGuests();
+      } catch {
+        setSyncing(false);
+        return syncFail("CSV import failed partway — check connection");
+      }
       setSyncing(false);
     }
     setModal(null);
@@ -692,19 +792,27 @@ export default function WeddingTracker() {
     showToast(`${parsed.length} guests imported`);
   };
 
-  // Export CSV
-  const exportCSV = () => {
-    const rows = [
-      "Name,Table,Checked In,Check-In Time,Angbao Given,Amount,Notes,VIP",
-      ...guests.map((g) =>
-        `"${g.name}",${g.table_number},${g.checked_in},${g.checked_in_at || ""},${g.angbao_given},${g.angbao_amount},"${g.notes || ""}",${g.is_vip}`
-      ),
-    ];
-    const blob = new Blob([rows.join("\n")], { type: "text/csv" });
+  // Trigger a browser download of `content` as `filename`.
+  const download = (content, filename, type) => {
+    const blob = new Blob([content], { type });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = "wedding-attendance.csv";
+    a.download = filename;
     a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
+  // Export CSV (cells are escaped against spreadsheet formula injection in toCSV).
+  const exportCSV = () => {
+    download(toCSV(guests), "wedding-attendance.csv", "text/csv");
+  };
+
+  // Lossless JSON backup of the raw guest rows — the safety net before/during
+  // the event (the CSV export drops id/party and reformats times).
+  const backupJSON = () => {
+    const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-");
+    download(JSON.stringify(guests, null, 2), `wedding-backup-${stamp}.json`, "application/json");
+    showToast(`Backed up ${guests.length} guests`);
   };
 
   // Filtered guests
@@ -739,12 +847,6 @@ export default function WeddingTracker() {
     tableSide[tNum] = sideGuest ? sideGuest.party : null;
   });
 
-  const formatTime = (iso) => {
-    if (!iso) return "";
-    const d = new Date(iso);
-    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  };
-
   if (!unlocked) {
     return (
       <>
@@ -752,23 +854,22 @@ export default function WeddingTracker() {
         <div className="pin-screen">
           <div className="pin-logo">♡ Wedding Day</div>
           <div className="pin-sub">Guest Attendance Tracker</div>
-          <div className="pin-box">
-            <div className="pin-label">Enter PIN to continue</div>
-            <div className="pin-dots">
-              {[0,1,2,3].map((i) => (
-                <div key={i} className={`pin-dot ${pin.length > i ? (pinShake ? "error" : "filled") : ""}`} />
-              ))}
-            </div>
-            <div className="pin-keypad">
-              {[1,2,3,4,5,6,7,8,9].map((n) => (
-                <button key={n} className="pin-key" onClick={() => handlePinKey(String(n))}>{n}</button>
-              ))}
-              <div />
-              <button className="pin-key" onClick={() => handlePinKey("0")}>0</button>
-              <button className="pin-key del" onClick={handlePinDelete}>⌫</button>
-            </div>
+          <form className="pin-box" onSubmit={unlock}>
+            <div className="pin-label">Enter access code to continue</div>
+            <input
+              className="pin-input"
+              type="password"
+              autoFocus
+              value={accessCode}
+              onChange={(e) => { setAccessCode(e.target.value); setPinError(""); }}
+              placeholder="Access code"
+              autoComplete="current-password"
+            />
+            <button type="submit" className="pin-unlock" disabled={unlocking || !accessCode}>
+              {unlocking ? "Checking…" : "Unlock"}
+            </button>
             <div className="pin-error">{pinError}</div>
-          </div>
+          </form>
         </div>
       </>
     );
@@ -833,6 +934,7 @@ export default function WeddingTracker() {
             <Icon.Plus /> Add Guest
           </button>
           <button className="btn btn-outline btn-sm" onClick={exportCSV} title="Export CSV"><Icon.Download /></button>
+          <button className="btn btn-outline btn-sm" onClick={backupJSON} title="Backup (JSON)">Backup</button>
           <button className="btn btn-outline btn-sm" onClick={loadGuests} title="Refresh"><Icon.Refresh /></button>
         </div>
 
@@ -889,6 +991,8 @@ export default function WeddingTracker() {
                         value={g.angbao_amount || ""}
                         onChange={(e) => updateAmount(g, e.target.value)}
                         onClick={(e) => e.stopPropagation()}
+                        onFocus={() => (editingId.current = g.id)}
+                        onBlur={() => { if (editingId.current === g.id) editingId.current = null; }}
                       />
                     )}
                   </div>
@@ -966,6 +1070,8 @@ export default function WeddingTracker() {
                                     value={g.angbao_amount || ""}
                                     onClick={(e) => e.stopPropagation()}
                                     onChange={(e) => updateAmount(g, e.target.value)}
+                                    onFocus={() => (editingId.current = g.id)}
+                                    onBlur={() => { if (editingId.current === g.id) editingId.current = null; }}
                                   />
                                 </div>
                               )}
@@ -1115,7 +1221,12 @@ export default function WeddingTracker() {
         )}
 
         {/* TOAST */}
-        {toast && <div className="toast">{toast}</div>}
+        {toast && (
+          <div className="toast">
+            <span>{toast.message}</span>
+            {toast.onUndo && <button className="toast-undo" onClick={toast.onUndo}>Undo</button>}
+          </div>
+        )}
       </div>
     </>
   );
