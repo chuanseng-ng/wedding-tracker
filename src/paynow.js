@@ -33,7 +33,8 @@ export function normalizeMobile(input) {
   if (!digits) return "";
   // Strip a leading 65 country code if the user already included it.
   const local = digits.length === 10 && digits.startsWith("65") ? digits.slice(2) : digits;
-  if (local.length !== 8) return "";
+  // SG mobile numbers are 8 digits and start with 8 or 9.
+  if (!/^[89]\d{7}$/.test(local)) return "";
   return `+65${local}`;
 }
 

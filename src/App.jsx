@@ -610,11 +610,12 @@ const QUICK_AMOUNTS = [20, 50, 88, 168, 288];
 function PayNowPage({ onBack }) {
   const [amountText, setAmountText] = useState("");
   const configured = !!normalizeMobile(PAYNOW_MOBILE);
+  const rawAmount = parseFloat(amountText);
+  const tooLarge = Number.isFinite(rawAmount) && rawAmount > MAX_ANGBAO;
   const amount = cleanAmount(amountText); // 0 when invalid / empty
-  const payload = configured && amount > 0
+  const payload = configured && !tooLarge && amount > 0
     ? buildPayNowPayload({ mobile: PAYNOW_MOBILE, amount, merchantName: PAYNOW_NAME, editable: false })
     : "";
-  const tooLarge = parseFloat(amountText) > MAX_ANGBAO;
 
   return (
     <>
