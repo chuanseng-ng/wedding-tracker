@@ -65,6 +65,29 @@ const styles = theme + `
     letter-spacing: 0.1em;
     text-transform: uppercase;
   }
+  .mode-toggle {
+    display: flex;
+    border: 1.5px solid rgba(201,168,76,0.35);
+    border-radius: 8px;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+  .mode-btn {
+    padding: 6px 14px;
+    border: none;
+    background: rgba(255,255,255,0.08);
+    cursor: pointer;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    color: rgba(255,255,255,0.55);
+    letter-spacing: 0.02em;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .mode-btn + .mode-btn { border-left: 1.5px solid rgba(201,168,76,0.35); }
+  .mode-btn.active { background: var(--gold); color: var(--charcoal); }
+  .mode-btn:not(.active):hover { background: rgba(255,255,255,0.14); color: rgba(255,255,255,0.85); }
 
   /* TOOLBAR */
   .toolbar {
@@ -435,7 +458,8 @@ export default function WeddingTracker() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
-  const [view, setView] = useState("guests");
+  const [mode, setMode] = useState("planning"); // "planning" | "dday"
+  const [view, setView] = useState("rsvp");
   const [modal, setModal] = useState(null); // 'add' | 'edit' | 'upload' | 'setup'
   const [editGuest, setEditGuest] = useState(null);
   const [toast, setToast] = useState(null);
@@ -583,6 +607,11 @@ export default function WeddingTracker() {
         () => { setToast(null); persist(guest.id, { angbao_given: guest.angbao_given, angbao_amount: guest.angbao_amount }, guest); }
       );
     }
+  };
+
+  const switchMode = (newMode) => {
+    setMode(newMode);
+    setView(newMode === "planning" ? "rsvp" : "guests");
   };
 
   // Generic optimistic update used by RsvpTab and SeatingTab for RSVP/seating edits.
@@ -756,6 +785,9 @@ export default function WeddingTracker() {
   const arrived = guests.filter((g) => g.checked_in).length;
   const angbaoTotal = guests.filter((g) => g.angbao_given).reduce((s, g) => s + (g.angbao_amount || 0), 0);
   const angbaoCount = guests.filter((g) => g.angbao_given).length;
+  const rsvpConfirmed = guests.filter((g) => g.rsvp_status === "confirmed").length;
+  const rsvpPending = guests.filter((g) => g.rsvp_status === "pending").length;
+  const rsvpHeadcount = rsvpConfirmed + guests.filter((g) => g.rsvp_status === "confirmed" && g.plus_one_name?.trim()).length;
 
   // Table groups
   const tables = {};
@@ -807,47 +839,85 @@ export default function WeddingTracker() {
         {/* HEADER */}
         <header className="header">
           <div className="header-left">
-            <div className="header-title">♡ Wedding Day</div>
-            <div className="header-subtitle">Guest Attendance Tracker</div>
+            <div className="header-title">
+              {mode === "planning" ? "♡ Wedding Planner" : "♡ Wedding Day"}
+            </div>
+            <div className="header-subtitle">
+              {mode === "planning" ? "RSVP & Seating Plan" : "Guest Attendance Tracker"}
+            </div>
           </div>
           <div className="header-stats">
             {isDemoMode && <span className="demo-badge">Demo Mode</span>}
-            <div className="stat-pill">
-              <span className="num">{arrived}/{total}</span>
-              <span className="lbl">Arrived</span>
-            </div>
-            <div className="stat-pill">
-              <span className="num">{total > 0 ? Math.round((arrived / total) * 100) : 0}%</span>
-              <span className="lbl">Attendance</span>
-            </div>
-            <div className="stat-pill">
-              <span className="num">🧧 {angbaoCount}</span>
-              <span className="lbl">Angbaos</span>
+            {mode === "planning" ? (
+              <>
+                <div className="stat-pill">
+                  <span className="num">{rsvpConfirmed}/{total}</span>
+                  <span className="lbl">Confirmed</span>
+                </div>
+                <div className="stat-pill">
+                  <span className="num">{rsvpHeadcount}</span>
+                  <span className="lbl">Headcount</span>
+                </div>
+                <div className="stat-pill">
+                  <span className="num">{rsvpPending}</span>
+                  <span className="lbl">Pending</span>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="stat-pill">
+                  <span className="num">{arrived}/{total}</span>
+                  <span className="lbl">Arrived</span>
+                </div>
+                <div className="stat-pill">
+                  <span className="num">{total > 0 ? Math.round((arrived / total) * 100) : 0}%</span>
+                  <span className="lbl">Attendance</span>
+                </div>
+                <div className="stat-pill">
+                  <span className="num">🧧 {angbaoCount}</span>
+                  <span className="lbl">Angbaos</span>
+                </div>
+              </>
+            )}
+            <div className="mode-toggle">
+              <button className={`mode-btn ${mode === "planning" ? "active" : ""}`} onClick={() => switchMode("planning")}>
+                📋 Planning
+              </button>
+              <button className={`mode-btn ${mode === "dday" ? "active" : ""}`} onClick={() => switchMode("dday")}>
+                💒 D-Day
+              </button>
             </div>
           </div>
         </header>
 
         {/* VIEW TABS */}
         <div className="view-tabs">
-          <button className={`view-tab ${view === "guests" ? "active" : ""}`} onClick={() => setView("guests")}>
-            <Icon.Check /> Guest List
-          </button>
-          <button className={`view-tab ${view === "tables" ? "active" : ""}`} onClick={() => setView("tables")}>
-            <Icon.Table /> Tables
-          </button>
-          <button className={`view-tab ${view === "angbao" ? "active" : ""}`} onClick={() => setView("angbao")}>
-            <Icon.Gift /> Angbao Tracker
-          </button>
-          <button className={`view-tab ${view === "rsvp" ? "active" : ""}`} onClick={() => setView("rsvp")}>
-            <Icon.Mail /> RSVP
-          </button>
-          <button className={`view-tab ${view === "seating" ? "active" : ""}`} onClick={() => setView("seating")}>
-            <Icon.Users /> Seating Plan
-          </button>
+          {mode === "planning" ? (
+            <>
+              <button className={`view-tab ${view === "rsvp" ? "active" : ""}`} onClick={() => setView("rsvp")}>
+                <Icon.Mail /> RSVP
+              </button>
+              <button className={`view-tab ${view === "seating" ? "active" : ""}`} onClick={() => setView("seating")}>
+                <Icon.Users /> Seating Plan
+              </button>
+            </>
+          ) : (
+            <>
+              <button className={`view-tab ${view === "guests" ? "active" : ""}`} onClick={() => setView("guests")}>
+                <Icon.Check /> Guest List
+              </button>
+              <button className={`view-tab ${view === "tables" ? "active" : ""}`} onClick={() => setView("tables")}>
+                <Icon.Table /> Tables
+              </button>
+              <button className={`view-tab ${view === "angbao" ? "active" : ""}`} onClick={() => setView("angbao")}>
+                <Icon.Gift /> Angbao Tracker
+              </button>
+            </>
+          )}
         </div>
 
-        {/* TOOLBAR — hidden on RSVP / Seating tabs which have their own controls */}
-        {view !== "rsvp" && view !== "seating" && <div className="toolbar">
+        {/* TOOLBAR — only shown in D-Day mode */}
+        {mode === "dday" && <div className="toolbar">
           <div className="search-wrap">
             <Icon.Search />
             <input className="search-input" placeholder="Search guests or table…" value={search} onChange={(e) => setSearch(e.target.value)} />
