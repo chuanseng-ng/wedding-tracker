@@ -58,6 +58,7 @@ const EXPORT_HEADERS = [
   "Check-In Time",
   "Angbao Given",
   "Amount",
+  "Draw Number",
   "Notes",
   "VIP",
 ];
@@ -73,6 +74,7 @@ export function toCSV(guests) {
         g.checked_in_at || "",
         g.angbao_given,
         g.angbao_amount,
+        g.draw_number ?? "",
         g.notes || "",
         g.is_vip,
       ]

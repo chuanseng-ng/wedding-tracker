@@ -56,6 +56,29 @@ const sb = {
     const { error } = await supabase.from(table).delete().eq("id", id);
     if (error) throw error;
   },
+  // Atomically mint (or re-read) a guest's lucky-draw number. See the
+  // assign_draw_number migration — distinct, assign-once, collision-free.
+  async assignDraw(guestId) {
+    const { data, error } = await supabase.rpc("assign_draw_number", { p_guest_id: guestId });
+    if (error) throw error;
+    return data;
+  },
+  // Guest-uploaded ang-bao submissions, newest first (own ordering — the table
+  // has no `name` column, so it can't reuse select()).
+  async listSubmissions() {
+    const { data, error } = await supabase
+      .from("submissions")
+      .select("*")
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    return data;
+  },
+  // Short-lived signed URL so a helper can view a receipt in the private bucket.
+  async receiptUrl(path) {
+    const { data, error } = await supabase.storage.from("receipts").createSignedUrl(path, 60);
+    if (error) throw error;
+    return data.signedUrl;
+  },
   subscribeToChanges(table, callback) {
     // Polling fallback for real-time (works without Supabase Realtime setup)
     const interval = setInterval(callback, 5000);
@@ -65,14 +88,14 @@ const sb = {
 
 // ─── DEMO MODE (no Supabase) ──────────────────────────────────────────────────
 const DEMO_GUESTS = [
-  { id: 1, name: "Tan Wei Ming", table_number: 1, checked_in: true, checked_in_at: "2024-06-15T18:32:00", angbao_given: true, angbao_amount: 200, notes: "Best man", is_vip: true },
-  { id: 2, name: "Lim Siew Yong", table_number: 1, checked_in: true, checked_in_at: "2024-06-15T18:45:00", angbao_given: true, angbao_amount: 150, notes: "", is_vip: false },
-  { id: 3, name: "Ahmad Razif", table_number: 2, checked_in: false, checked_in_at: null, angbao_given: false, angbao_amount: 0, notes: "Vegetarian", is_vip: false },
-  { id: 4, name: "Priya Nair", table_number: 2, checked_in: true, checked_in_at: "2024-06-15T19:01:00", angbao_given: true, angbao_amount: 100, notes: "", is_vip: false },
-  { id: 5, name: "Chen Jing Wen", table_number: 3, checked_in: false, checked_in_at: null, angbao_given: false, angbao_amount: 0, notes: "", is_vip: false },
-  { id: 6, name: "Ng Boon Kiat", table_number: 3, checked_in: true, checked_in_at: "2024-06-15T19:15:00", angbao_given: false, angbao_amount: 0, notes: "Uncle of groom", is_vip: true },
-  { id: 7, name: "Siti Rahimah", table_number: 4, checked_in: false, checked_in_at: null, angbao_given: false, angbao_amount: 0, notes: "", is_vip: false },
-  { id: 8, name: "David Koh", table_number: 4, checked_in: true, checked_in_at: "2024-06-15T18:50:00", angbao_given: true, angbao_amount: 300, notes: "Boss", is_vip: true },
+  { id: 1, name: "Tan Wei Ming", table_number: 1, checked_in: true, checked_in_at: "2024-06-15T18:32:00", angbao_given: true, angbao_amount: 200, draw_number: 1, notes: "Best man", is_vip: true },
+  { id: 2, name: "Lim Siew Yong", table_number: 1, checked_in: true, checked_in_at: "2024-06-15T18:45:00", angbao_given: true, angbao_amount: 150, draw_number: 2, notes: "", is_vip: false },
+  { id: 3, name: "Ahmad Razif", table_number: 2, checked_in: false, checked_in_at: null, angbao_given: false, angbao_amount: 0, draw_number: null, notes: "Vegetarian", is_vip: false },
+  { id: 4, name: "Priya Nair", table_number: 2, checked_in: true, checked_in_at: "2024-06-15T19:01:00", angbao_given: true, angbao_amount: 100, draw_number: 3, notes: "", is_vip: false },
+  { id: 5, name: "Chen Jing Wen", table_number: 3, checked_in: false, checked_in_at: null, angbao_given: false, angbao_amount: 0, draw_number: null, notes: "", is_vip: false },
+  { id: 6, name: "Ng Boon Kiat", table_number: 3, checked_in: true, checked_in_at: "2024-06-15T19:15:00", angbao_given: false, angbao_amount: 0, draw_number: null, notes: "Uncle of groom", is_vip: true },
+  { id: 7, name: "Siti Rahimah", table_number: 4, checked_in: false, checked_in_at: null, angbao_given: false, angbao_amount: 0, draw_number: null, notes: "", is_vip: false },
+  { id: 8, name: "David Koh", table_number: 4, checked_in: true, checked_in_at: "2024-06-15T18:50:00", angbao_given: true, angbao_amount: 300, draw_number: 4, notes: "Boss", is_vip: true },
 ];
 
 // ─── ICONS ────────────────────────────────────────────────────────────────────
@@ -409,6 +432,68 @@ const styles = `
     margin-top: 24px; transition: color 0.15s;
   }
   .pay-back:hover { color: var(--gold-light); }
+  .pay-upload {
+    width: 100%; margin-top: 8px; padding-top: 22px;
+    border-top: 1px solid rgba(201,168,76,0.18);
+    display: flex; flex-direction: column; align-items: center; gap: 14px;
+  }
+  .pay-upload-title {
+    font-family: 'Cormorant Garamond', serif; font-size: 20px; color: var(--gold-light);
+  }
+  .pay-file {
+    width: 100%; box-sizing: border-box; color: rgba(255,255,255,0.6); font-size: 13px;
+    font-family: 'DM Sans', sans-serif;
+  }
+  .pay-file::file-selector-button {
+    margin-right: 10px; padding: 8px 12px; border-radius: 10px; cursor: pointer;
+    background: rgba(255,255,255,0.06); border: 1.5px solid rgba(201,168,76,0.25);
+    color: var(--gold-light); font-family: 'DM Sans', sans-serif; font-size: 13px;
+  }
+  .pay-upload-done {
+    font-size: 14px; color: #82d9a0; text-align: center; line-height: 1.6; max-width: 270px;
+  }
+
+  /* DRAW NUMBER BADGE */
+  .draw-badge {
+    display: inline-flex; align-items: center; gap: 4px; white-space: nowrap;
+    background: rgba(201,168,76,0.14); border: 1px solid rgba(201,168,76,0.4);
+    color: var(--gold-dark); border-radius: 20px; padding: 2px 9px;
+    font-size: 12px; font-weight: 600; letter-spacing: 0.03em;
+  }
+
+  /* SUBMISSIONS (guest-uploaded receipts) */
+  .subs-list { display: flex; flex-direction: column; gap: 12px; max-width: 760px; margin: 0 auto; }
+  .sub-row {
+    display: flex; align-items: center; gap: 14px; background: white;
+    border-radius: var(--radius); padding: 16px 18px; box-shadow: var(--shadow);
+    border: 1.5px solid rgba(201,168,76,0.15);
+  }
+  .sub-row.is-approved { opacity: 0.6; }
+  .sub-row.is-rejected { opacity: 0.5; }
+  .sub-name { font-weight: 600; font-size: 15px; color: var(--charcoal); }
+  .sub-meta { font-size: 12px; color: var(--brown); opacity: 0.65; margin-top: 2px; }
+  .sub-claim { font-family: 'Cormorant Garamond', serif; font-size: 22px; color: var(--gold-dark); }
+  .sub-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .sub-status {
+    font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase;
+    padding: 4px 10px; border-radius: 20px;
+  }
+  .sub-status.approved { background: rgba(130,217,160,0.18); color: #2e7d4f; }
+  .sub-status.rejected { background: rgba(241,148,138,0.18); color: #b53f30; }
+  .sub-pill {
+    font-size: 11px; background: var(--red); color: white; border-radius: 20px;
+    padding: 1px 7px; margin-left: 6px; font-weight: 600;
+  }
+
+  /* APPROVE MODAL guest picker */
+  .approve-claim { background: var(--warm-white); border-radius: 10px; padding: 12px 14px; margin-bottom: 6px; }
+  .guest-pick-list { max-height: 220px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+  .guest-pick {
+    text-align: left; background: var(--warm-white); border: 1.5px solid transparent;
+    border-radius: 10px; padding: 10px 12px; cursor: pointer; font-family: 'DM Sans', sans-serif;
+    color: var(--charcoal); font-size: 14px; transition: all 0.12s;
+  }
+  .guest-pick:hover { border-color: var(--gold); background: white; }
 
   /* GUEST QUICK POPUP */
   .table-guest-name-btn {
@@ -578,6 +663,10 @@ const styles = `
 // the browser — no backend, no payment provider, no fees.
 const QUICK_AMOUNTS = [20, 50, 88, 168, 288];
 
+// Optional guest receipt upload limits (mirrored by the bucket's own caps).
+const MAX_RECEIPT_BYTES = 5 * 1024 * 1024;
+const RECEIPT_TYPES = ["image/png", "image/jpeg", "image/webp", "image/heic", "image/heif", "application/pdf"];
+
 function PayNowPage({ onBack }) {
   const [amountText, setAmountText] = useState("");
   const configured = !!normalizeMobile(PAYNOW_MOBILE);
@@ -587,6 +676,41 @@ function PayNowPage({ onBack }) {
   const payload = configured && !tooLarge && amount > 0
     ? buildPayNowPayload({ mobile: PAYNOW_MOBILE, amount, merchantName: PAYNOW_NAME, editable: false })
     : "";
+
+  // ── Optional: let the guest upload their transfer receipt for faster
+  // confirmation. Purely opt-in — they can ignore this and just show reception
+  // the receipt in person. Only available when the database is configured.
+  const dbEnabled = !!supabase;
+  const [guestName, setGuestName] = useState("");
+  const [receiptFile, setReceiptFile] = useState(null);
+  const [uploadState, setUploadState] = useState("idle"); // idle | sending | done | error
+  const [uploadError, setUploadError] = useState("");
+
+  const submitReceipt = async () => {
+    const nm = cleanName(guestName);
+    if (!nm) { setUploadError("Please enter your name."); return; }
+    if (!receiptFile) { setUploadError("Please choose your receipt file."); return; }
+    if (receiptFile.size > MAX_RECEIPT_BYTES) { setUploadError("That file is too large (max 5 MB)."); return; }
+    if (!RECEIPT_TYPES.includes(receiptFile.type)) { setUploadError("Please upload an image or PDF."); return; }
+    setUploadState("sending");
+    setUploadError("");
+    try {
+      const ext = (receiptFile.name.split(".").pop() || "dat").toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 8);
+      const path = `${crypto.randomUUID()}.${ext || "dat"}`;
+      const up = await supabase.storage.from("receipts").upload(path, receiptFile, {
+        contentType: receiptFile.type, upsert: false,
+      });
+      if (up.error) throw up.error;
+      const ins = await supabase.from("submissions").insert({
+        guest_name: nm, claimed_amount: amount, receipt_path: path,
+      });
+      if (ins.error) throw ins.error;
+      setUploadState("done");
+    } catch {
+      setUploadState("error");
+      setUploadError("Upload failed — please just show your receipt to reception instead.");
+    }
+  };
 
   return (
     <>
@@ -650,6 +774,49 @@ function PayNowPage({ onBack }) {
                   Type an amount above to generate your PayNow QR code.
                 </div>
               )}
+
+              {dbEnabled && (
+                <div className="pay-upload">
+                  <div className="pay-upload-title">Already paid?</div>
+                  <div className="pay-hint" style={{ maxWidth: "260px" }}>
+                    Optional — upload your transfer receipt so reception can confirm
+                    your lucky-draw number faster. You can skip this and simply show
+                    your receipt in person.
+                  </div>
+
+                  {uploadState === "done" ? (
+                    <div className="pay-upload-done">
+                      ✓ Thanks, {cleanName(guestName)}! Reception will confirm your
+                      lucky-draw number shortly.
+                    </div>
+                  ) : (
+                    <>
+                      <input
+                        className="pin-input"
+                        type="text"
+                        placeholder="Your name (as on the guest list)"
+                        value={guestName}
+                        onChange={(e) => { setGuestName(e.target.value); setUploadError(""); }}
+                      />
+                      <input
+                        className="pay-file"
+                        type="file"
+                        accept="image/*,application/pdf"
+                        onChange={(e) => { setReceiptFile(e.target.files?.[0] || null); setUploadError(""); }}
+                      />
+                      <div className="pay-error">{uploadError}</div>
+                      <button
+                        type="button"
+                        className="pin-unlock"
+                        onClick={submitReceipt}
+                        disabled={uploadState === "sending"}
+                      >
+                        {uploadState === "sending" ? "Uploading…" : "Upload receipt"}
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
             </>
           )}
         </div>
@@ -679,6 +846,10 @@ export default function WeddingTracker() {
   const [syncing, setSyncing] = useState(false);
   const [activePopup, setActivePopup] = useState(null); // guest id
   const [route, setRoute] = useState(() => window.location.hash.replace(/^#\/?/, ""));
+  const [submissions, setSubmissions] = useState([]);
+  const [approveSub, setApproveSub] = useState(null); // submission being reviewed
+  const [approveSearch, setApproveSearch] = useState("");
+  const [approveAmount, setApproveAmount] = useState("");
 
   // Hash-based routing: "#pay" opens the public ang-bao QR page (no login needed).
   useEffect(() => {
@@ -775,6 +946,23 @@ export default function WeddingTracker() {
     return unsub;
   }, [loadGuests]);
 
+  // Guest-uploaded receipts (only when signed in + a real database is present).
+  const loadSubmissions = useCallback(async () => {
+    if (isDemoMode) return;
+    try {
+      const data = await sb.listSubmissions();
+      if (Array.isArray(data)) setSubmissions(data);
+    } catch { /* a transient poll failure is fine; the next tick retries */ }
+  }, []);
+
+  useEffect(() => {
+    if (!unlocked || isDemoMode) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadSubmissions();
+    const unsub = sb.subscribeToChanges("submissions", loadSubmissions);
+    return unsub;
+  }, [unlocked, loadSubmissions]);
+
   // On a failed write, keep the optimistic value (don't yank it back — a wifi
   // blip mid-tap shouldn't undo what the helper just did) and warn them. The
   // next clean poll reconciles against the server.
@@ -815,16 +1003,36 @@ export default function WeddingTracker() {
     }
   };
 
-  // Toggle angbao (undoable)
+  // Mint (or re-read) a guest's lucky-draw number once their angbao is
+  // confirmed. Assign-once: a guest who already has a number keeps it. Returns
+  // the number, or null if it could not be assigned.
+  const mintDraw = async (guest) => {
+    if (guest.draw_number) return guest.draw_number;
+    let n;
+    if (isDemoMode) {
+      n = guests.reduce((m, g) => Math.max(m, g.draw_number || 0), 0) + 1;
+    } else {
+      try { n = await sb.assignDraw(guest.id); }
+      catch { syncFail("Lucky-draw number not assigned — check connection"); return null; }
+    }
+    setGuests((g) => g.map((x) => (x.id === guest.id ? { ...x, draw_number: n } : x)));
+    return n;
+  };
+
+  // Toggle angbao (undoable). Confirming an angbao also mints the guest's stable
+  // lucky-draw number; clearing it keeps the number (assign-once).
   const toggleAngbao = async (guest) => {
-    const updated = { ...guest, angbao_given: !guest.angbao_given };
-    if (!updated.angbao_given) updated.angbao_amount = 0;
+    const becomingGiven = !guest.angbao_given;
+    const updated = { ...guest, angbao_given: becomingGiven };
+    if (!becomingGiven) updated.angbao_amount = 0;
     const ok = await persist(guest.id, { angbao_given: updated.angbao_given, angbao_amount: updated.angbao_amount }, updated);
-    if (ok) {
-      showToast(
-        updated.angbao_given ? `🧧 ${guest.name} — angbao received` : `${guest.name} — angbao cleared`,
-        () => { setToast(null); persist(guest.id, { angbao_given: guest.angbao_given, angbao_amount: guest.angbao_amount }, guest); }
-      );
+    if (!ok) return;
+    const undo = () => { setToast(null); persist(guest.id, { angbao_given: guest.angbao_given, angbao_amount: guest.angbao_amount }, guest); };
+    if (becomingGiven) {
+      const n = await mintDraw(updated);
+      showToast(n ? `🧧 ${guest.name} — angbao received · Draw #${n}` : `🧧 ${guest.name} — angbao received`, undo);
+    } else {
+      showToast(`${guest.name} — angbao cleared`, undo);
     }
   };
 
@@ -848,6 +1056,61 @@ export default function WeddingTracker() {
     }, 400);
   };
 
+  // ── Guest-upload review (Submissions tab) ───────────────────────────────────
+  const openApprove = (sub) => {
+    setApproveSub(sub);
+    setApproveSearch("");
+    setApproveAmount(sub.claimed_amount ? String(sub.claimed_amount) : "");
+    setModal("approve");
+  };
+
+  // Confirm a submission against a guest: mark them given + amount, mint their
+  // lucky-draw number, and close out the submission.
+  const finalizeApproval = async (sub, guest, amount) => {
+    const val = cleanAmount(amount);
+    const updated = { ...guest, angbao_given: true, angbao_amount: val };
+    const ok = await persist(guest.id, { angbao_given: true, angbao_amount: val }, updated);
+    if (!ok) return;
+    const n = await mintDraw(updated);
+    try { await sb.update("submissions", sub.id, { status: "approved", matched_guest_id: guest.id }); }
+    catch { syncFail("Submission status not saved — check connection"); }
+    setSubmissions((s) => s.map((x) => (x.id === sub.id ? { ...x, status: "approved", matched_guest_id: guest.id } : x)));
+    setModal(null); setApproveSub(null);
+    showToast(n ? `🧧 ${guest.name} approved · Draw #${n}` : `🧧 ${guest.name} approved`);
+  };
+
+  // The uploader isn't on the guest list yet — create the guest, then approve.
+  // Submissions only exist with a real database, so this never runs in demo mode.
+  const approveAsNewGuest = async () => {
+    if (isDemoMode) return;
+    const sub = approveSub;
+    const data = {
+      name: cleanName(sub.guest_name), table_number: "1", notes: "", party: "",
+      is_vip: false, checked_in: false, checked_in_at: null, angbao_given: false, angbao_amount: 0,
+    };
+    let guest;
+    try {
+      const res = await sb.insert("guests", data);
+      guest = Array.isArray(res) ? res[0] : null;
+      if (guest) setGuests((g) => [...g, guest]);
+    } catch { return syncFail("Could not add guest — check connection"); }
+    if (guest) finalizeApproval(sub, guest, approveAmount);
+  };
+
+  const rejectSubmission = async (sub) => {
+    if (!isDemoMode) {
+      try { await sb.update("submissions", sub.id, { status: "rejected" }); }
+      catch { return syncFail("Submission status not saved — check connection"); }
+    }
+    setSubmissions((s) => s.map((x) => (x.id === sub.id ? { ...x, status: "rejected" } : x)));
+    showToast("Submission rejected");
+  };
+
+  const viewReceipt = async (sub) => {
+    try { window.open(await sb.receiptUrl(sub.receipt_path), "_blank", "noopener"); }
+    catch { showToast("Could not open receipt"); }
+  };
+
   // Save guest (add/edit)
   const saveGuest = async () => {
     if (!cleanName(form.name)) return;
@@ -861,6 +1124,7 @@ export default function WeddingTracker() {
       checked_in_at: editGuest?.checked_in_at || null,
       angbao_given: editGuest?.angbao_given || false,
       angbao_amount: editGuest?.angbao_amount || 0,
+      draw_number: editGuest?.draw_number ?? null,
     };
     try {
       if (editGuest) {
@@ -916,6 +1180,7 @@ export default function WeddingTracker() {
       checked_in_at: guest.checked_in_at || null,
       angbao_given: guest.angbao_given || false,
       angbao_amount: guest.angbao_amount || 0,
+      draw_number: guest.draw_number ?? null,
     };
     if (isDemoMode) {
       setGuests((g) => [...g, { ...data, id: Date.now() }]);
@@ -990,6 +1255,7 @@ export default function WeddingTracker() {
   const arrived = guests.filter((g) => g.checked_in).length;
   const angbaoTotal = guests.filter((g) => g.angbao_given).reduce((s, g) => s + (g.angbao_amount || 0), 0);
   const angbaoCount = guests.filter((g) => g.angbao_given).length;
+  const pendingSubs = submissions.filter((s) => s.status === "pending").length;
 
   // Table groups
   const tables = {};
@@ -1080,6 +1346,12 @@ export default function WeddingTracker() {
           <button className={`view-tab ${view === "angbao" ? "active" : ""}`} onClick={() => setView("angbao")}>
             <Icon.Gift /> Angbao Tracker
           </button>
+          {!isDemoMode && (
+            <button className={`view-tab ${view === "submissions" ? "active" : ""}`} onClick={() => setView("submissions")}>
+              <Icon.Upload /> Submissions
+              {pendingSubs > 0 && <span className="sub-pill">{pendingSubs}</span>}
+            </button>
+          )}
         </div>
 
         {/* TOOLBAR */}
@@ -1161,6 +1433,7 @@ export default function WeddingTracker() {
                         onBlur={() => { if (editingId.current === g.id) editingId.current = null; }}
                       />
                     )}
+                    {g.draw_number ? <span className="draw-badge" title="Lucky-draw number">🎟 #{g.draw_number}</span> : null}
                   </div>
                   <div className="guest-actions">
                     <button className="icon-btn" onClick={() => { setEditGuest(g); setForm({ name: g.name, table_number: g.table_number, notes: g.notes || "", party: g.party || "", is_vip: g.is_vip || false }); setModal("edit"); }}>
@@ -1241,6 +1514,12 @@ export default function WeddingTracker() {
                                   />
                                 </div>
                               )}
+                              {g.draw_number ? (
+                                <div className="popup-row">
+                                  <span className="popup-label">Lucky draw</span>
+                                  <span className="draw-badge">🎟 #{g.draw_number}</span>
+                                </div>
+                              ) : null}
                             </div>
                           )}
                         </div>
@@ -1253,7 +1532,7 @@ export default function WeddingTracker() {
                 <div className="empty"><div className="empty-icon">🪑</div><div className="empty-text">No tables yet</div><div className="empty-sub">Add guests with table numbers</div></div>
               )}
             </div>
-          ) : (
+          ) : view === "angbao" ? (
             /* ANGBAO VIEW */
             <>
               <div className="angbao-header">
@@ -1292,6 +1571,7 @@ export default function WeddingTracker() {
                     ) : (
                       <div className="pending-tag">pending</div>
                     )}
+                    {g.draw_number ? <span className="draw-badge" style={{marginLeft:"8px"}}>🎟 #{g.draw_number}</span> : null}
                     <button className={`angbao-toggle ${g.angbao_given ? "given" : "not-given"}`} onClick={() => toggleAngbao(g)} style={{marginLeft:"8px"}}>
                       {g.angbao_given ? "✓ Received" : "Mark Received"}
                     </button>
@@ -1299,6 +1579,36 @@ export default function WeddingTracker() {
                 ))}
               </div>
             </>
+          ) : (
+            /* SUBMISSIONS VIEW — guest-uploaded receipts awaiting confirmation */
+            <div className="subs-list">
+              {submissions.length === 0 ? (
+                <div className="empty">
+                  <div className="empty-icon">📨</div>
+                  <div className="empty-text">No guest uploads yet</div>
+                  <div className="empty-sub">Guests can optionally upload a receipt from the gift page. You can always confirm in person instead.</div>
+                </div>
+              ) : submissions.map((s) => (
+                <div key={s.id} className={`sub-row is-${s.status}`}>
+                  <div style={{ flex: 1 }}>
+                    <div className="sub-name">{s.guest_name}</div>
+                    <div className="sub-meta">{formatTime(s.created_at)}{s.status !== "pending" ? ` · ${s.status}` : ""}</div>
+                  </div>
+                  <div className="sub-claim">{s.claimed_amount ? `$${s.claimed_amount}` : "—"}</div>
+                  <div className="sub-actions">
+                    <button className="btn btn-outline btn-sm" onClick={() => viewReceipt(s)}>View receipt</button>
+                    {s.status === "pending" ? (
+                      <>
+                        <button className="btn btn-gold btn-sm" onClick={() => openApprove(s)}>Approve</button>
+                        <button className="btn btn-outline btn-sm" onClick={() => rejectSubmission(s)}>Reject</button>
+                      </>
+                    ) : (
+                      <span className={`sub-status ${s.status}`}>{s.status}</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
         </div>
 
@@ -1381,6 +1691,46 @@ export default function WeddingTracker() {
                 <button className="btn btn-gold" onClick={importCSV} disabled={!csvText.trim() || syncing}>
                   {syncing ? "Importing…" : `Import Guests`}
                 </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* APPROVE SUBMISSION MODAL */}
+        {modal === "approve" && approveSub && (
+          <div className="modal-overlay" onClick={() => { setModal(null); setApproveSub(null); }}>
+            <div className="modal" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-title">Confirm Ang-Bao</div>
+              <div className="approve-claim">
+                <div><strong>{approveSub.guest_name}</strong> uploaded a receipt</div>
+                <div style={{ fontSize: "13px", color: "var(--brown)", opacity: 0.7, marginTop: "4px" }}>
+                  Claimed amount: {approveSub.claimed_amount ? `$${approveSub.claimed_amount}` : "not stated"}
+                </div>
+                <button className="btn btn-outline btn-sm" style={{ marginTop: "8px" }} onClick={() => viewReceipt(approveSub)}>View receipt</button>
+              </div>
+              <div className="form-grid">
+                <div className="form-group">
+                  <label className="form-label">Confirmed amount ($)</label>
+                  <input className="form-input" type="number" placeholder="0" value={approveAmount} onChange={(e) => setApproveAmount(e.target.value)} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Match to a guest on the list</label>
+                  <input className="form-input" placeholder="Search guests…" value={approveSearch} onChange={(e) => setApproveSearch(e.target.value)} />
+                  <div className="guest-pick-list" style={{ marginTop: "8px" }}>
+                    {guests
+                      .filter((g) => g.name.toLowerCase().includes(approveSearch.toLowerCase()))
+                      .slice(0, 30)
+                      .map((g) => (
+                        <button key={g.id} className="guest-pick" onClick={() => finalizeApproval(approveSub, g, approveAmount)}>
+                          {g.name} <span style={{ opacity: 0.55, fontSize: "12px" }}>· Table {g.table_number}{g.angbao_given ? " · already gave" : ""}</span>
+                        </button>
+                      ))}
+                  </div>
+                </div>
+              </div>
+              <div className="modal-actions">
+                <button className="btn btn-outline" onClick={() => { setModal(null); setApproveSub(null); }}>Cancel</button>
+                <button className="btn btn-gold" onClick={approveAsNewGuest}>+ Add as new guest</button>
               </div>
             </div>
           </div>

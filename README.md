@@ -33,7 +33,7 @@ npm install
 ## 2. Set up Supabase
 
 1. Create a new project at [supabase.com](https://supabase.com).
-2. **Database** — open the **SQL Editor** and run the contents of [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql). This creates the `guests` table and locks Row Level Security to authenticated helpers only.
+2. **Database** — open the **SQL Editor** and run the contents of [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql), then [`supabase/migrations/0002_draw_and_submissions.sql`](supabase/migrations/0002_draw_and_submissions.sql). The first creates the `guests` table and locks Row Level Security to authenticated helpers only. The second adds the **lucky-draw number** (`draw_number`, minted when an ang-bao is confirmed), the **guest receipt-upload queue** (`submissions` table), and a **private `receipts` storage bucket**. Guests can only *insert* a pending submission / *upload* a file — they can never read, list, or approve anything; helpers review and approve from the **Submissions** tab.
    > ⚠️ Don't use a `for all using (true)` policy — that exposes the whole guest list to anyone with the (public) anon key.
 3. **Helper login** — under **Authentication → Users**, add one user (e.g. `helpers@wedding.local`) with a strong password. That password is the **access code** your helpers enter. Then under **Authentication → Providers → Email**, turn off "Allow new users to sign up".
 4. **API keys** — under **Project Settings → API**, copy your **Project URL** and **anon public key**.
