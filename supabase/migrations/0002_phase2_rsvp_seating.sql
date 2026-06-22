@@ -176,9 +176,9 @@ $$;
 
 grant execute on function public.submit_rsvp(uuid, text, text, text, text, text, text) to anon, authenticated;
 
--- 3c. Exact name lookup for the "no token" fallback — lets a guest who lost
---     their link find themselves by full name. Returns name + token only
---     (no other guest fields), limit 5 to prevent enumeration abuse.
+-- 3c. Partial name lookup — guests type any part of their name (first, last,
+--     or full). Returns name + token only (no other guest fields), limit 5
+--     to prevent enumeration abuse. Requires at least 2 characters.
 create or replace function public.find_guest_by_name(p_name text)
 returns table (
   id         uuid,
@@ -191,7 +191,11 @@ set search_path = public
 as $$
   select id, name, rsvp_token
   from public.guests
-  where lower(trim(name)) = lower(trim(p_name))
+  where char_length(trim(p_name)) >= 2
+    and lower(name) like '%' || lower(trim(p_name)) || '%'
+  order by
+    case when lower(trim(name)) = lower(trim(p_name)) then 0 else 1 end,
+    name
   limit 5;
 $$;
 
