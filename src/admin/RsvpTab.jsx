@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-const MEAL_OPTIONS = ["", "Chicken", "Fish", "Vegetarian"];
+const MEAL_OPTIONS = ["", "Halal", "Vegetarian", "Normal"];
 
 const styles = `
   .rsvp-tab { display: flex; flex-direction: column; gap: 20px; }

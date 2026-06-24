@@ -3,7 +3,7 @@ import { sb, isDemoMode } from "../lib/supabase.js";
 import { theme } from "../shared/theme.js";
 import { cleanName, cleanNotes } from "../lib/validation.js";
 
-const MEAL_OPTIONS = ["Chicken", "Fish", "Vegetarian"];
+const MEAL_OPTIONS = ["Halal", "Vegetarian", "Normal"];
 
 const styles = theme + `
   .rsvp-wrap {
@@ -155,13 +155,16 @@ export default function RsvpPage() {
       });
       setDone(true);
     } catch (err) {
-      const msg = err?.message ?? "";
+      const msg = (err?.message ?? "").toLowerCase();
+      console.error("[RSVP] submit error:", err);
       if (msg.includes("not_found")) {
         setError("We couldn't find your name on the guest list. Please check the spelling or contact us.");
       } else if (msg.includes("ambiguous")) {
         setError("We found more than one match for that name. Please enter your full name.");
+      } else if (msg.includes("function") || msg.includes("does not exist") || msg.includes("pgrst")) {
+        setError("RSVP is not set up yet — the database migration hasn't been run. Contact the couple.");
       } else {
-        setError("Something went wrong. Please try again.");
+        setError(`Something went wrong: ${err?.message ?? "unknown error"}`);
       }
     } finally {
       setSubmitting(false);
