@@ -923,27 +923,35 @@ export default function WeddingTracker() {
           )}
         </div>
 
-        {/* TOOLBAR — only shown in D-Day mode */}
-        {mode === "dday" && <div className="toolbar">
-          <div className="search-wrap">
-            <Icon.Search />
-            <input className="search-input" placeholder="Search guests or table…" value={search} onChange={(e) => setSearch(e.target.value)} />
-          </div>
-          <div className="filter-tabs">
-            {[["all","All"],["arrived","Arrived"],["pending","Pending"],["angbao","🧧 Gave"]].map(([k,l]) => (
-              <button key={k} className={`filter-tab ${filter === k ? "active" : ""}`} onClick={() => setFilter(k)}>{l}</button>
-            ))}
-          </div>
+        {/* TOOLBAR */}
+        <div className="toolbar">
+          {mode === "dday" && (
+            <>
+              <div className="search-wrap">
+                <Icon.Search />
+                <input className="search-input" placeholder="Search guests or table…" value={search} onChange={(e) => setSearch(e.target.value)} />
+              </div>
+              <div className="filter-tabs">
+                {[["all","All"],["arrived","Arrived"],["pending","Pending"],["angbao","🧧 Gave"]].map(([k,l]) => (
+                  <button key={k} className={`filter-tab ${filter === k ? "active" : ""}`} onClick={() => setFilter(k)}>{l}</button>
+                ))}
+              </div>
+            </>
+          )}
           <button className="btn btn-outline" onClick={() => { setModal("upload"); }}>
             <Icon.Upload /> Import CSV
           </button>
           <button className="btn btn-gold" onClick={() => { setEditGuest(null); setForm({ name: "", table_number: "", notes: "", party: "", is_vip: false }); setModal("add"); }}>
             <Icon.Plus /> Add Guest
           </button>
-          <button className="btn btn-outline btn-sm" onClick={exportCSV} title="Export CSV"><Icon.Download /></button>
-          <button className="btn btn-outline btn-sm" onClick={backupJSON} title="Backup (JSON)">Backup</button>
-          <button className="btn btn-outline btn-sm" onClick={loadGuests} title="Refresh"><Icon.Refresh /></button>
-        </div>}
+          {mode === "dday" && (
+            <>
+              <button className="btn btn-outline btn-sm" onClick={exportCSV} title="Export CSV"><Icon.Download /></button>
+              <button className="btn btn-outline btn-sm" onClick={backupJSON} title="Backup (JSON)">Backup</button>
+              <button className="btn btn-outline btn-sm" onClick={loadGuests} title="Refresh"><Icon.Refresh /></button>
+            </>
+          )}
+        </div>
 
         {/* CONTENT */}
         <div className="content">
