@@ -1090,7 +1090,8 @@ export default function WeddingTracker() {
         }
         showToast("Guest added");
       }
-    } catch {
+    } catch (err) {
+      console.error("[saveGuest] failed:", err);
       return syncFail("Could not save guest — check connection");
     }
     setModal(null);
