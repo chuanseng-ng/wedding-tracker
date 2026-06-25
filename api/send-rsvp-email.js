@@ -30,6 +30,9 @@ export default async function handler(req, res) {
 
   const resend = new Resend(process.env.RESEND_API_KEY);
   const coupleNames = process.env.COUPLE_NAMES || "The Happy Couple";
+  // RESEND_FROM_EMAIL lets you override with Resend's sandbox sender
+  // (onboarding@resend.dev) before a domain is verified — see .env.example.
+  const fromAddress = process.env.RESEND_FROM_EMAIL || `rsvp@${process.env.RESEND_SENDING_DOMAIN}`;
 
   if (guest.rsvp_status === "confirmed") {
     const ics = buildIcs({
@@ -42,7 +45,7 @@ export default async function handler(req, res) {
     });
 
     await resend.emails.send({
-      from: `${coupleNames} <rsvp@${process.env.RESEND_SENDING_DOMAIN}>`,
+      from: `${coupleNames} <${fromAddress}>`,
       to: guest.email,
       subject: `You're confirmed! ${coupleNames}'s Wedding`,
       html: `<p>Hi ${guest.name},</p><p>Thanks for confirming — we can't wait to celebrate with you!</p><p>${process.env.VENUE_NAME}, ${process.env.VENUE_ADDRESS}<br>${process.env.WEDDING_DATE}</p>`,
@@ -52,7 +55,7 @@ export default async function handler(req, res) {
     });
   } else if (guest.rsvp_status === "declined") {
     await resend.emails.send({
-      from: `${coupleNames} <rsvp@${process.env.RESEND_SENDING_DOMAIN}>`,
+      from: `${coupleNames} <${fromAddress}>`,
       to: guest.email,
       subject: `We'll miss you — ${coupleNames}'s Wedding`,
       html: `<p>Hi ${guest.name},</p><p>Thanks for letting us know. We'll miss you, but hope to celebrate together another time!</p>`,

@@ -37,6 +37,7 @@ export default async function handler(req, res) {
 
   const resend = new Resend(process.env.RESEND_API_KEY);
   const coupleNames = process.env.COUPLE_NAMES || "The Happy Couple";
+  const fromAddress = process.env.RESEND_FROM_EMAIL || `rsvp@${process.env.RESEND_SENDING_DOMAIN}`;
   let sent = 0;
 
   for (const guest of guests) {
@@ -45,7 +46,7 @@ export default async function handler(req, res) {
     if (!isFirstReminder && !isSecondReminder) continue;
 
     await resend.emails.send({
-      from: `${coupleNames} <rsvp@${process.env.RESEND_SENDING_DOMAIN}>`,
+      from: `${coupleNames} <${fromAddress}>`,
       to: guest.email,
       subject: `Reminder: RSVP for ${coupleNames}'s Wedding`,
       html: `<p>Hi ${guest.name},</p><p>Just a friendly reminder to RSVP for our wedding on ${weddingDate} — we'd love to know if you can make it!</p>`,
