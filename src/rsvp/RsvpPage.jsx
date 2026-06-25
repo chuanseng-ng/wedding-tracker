@@ -1,9 +1,30 @@
 import { useState } from "react";
 import { sb, isDemoMode } from "../lib/supabase.js";
 import { theme } from "../shared/theme.js";
-import { cleanName, cleanNotes } from "../lib/validation.js";
+import { cleanName, cleanNotes, cleanParty, cleanRelationshipGroup, cleanFriendSubgroup } from "../lib/validation.js";
 
 const MEAL_OPTIONS = ["Halal", "Vegetarian", "Normal"];
+
+const RELATIONSHIP_OPTIONS = [
+  { value: "family", label: "Family" },
+  { value: "colleagues", label: "Colleagues" },
+  { value: "friends", label: "Friends" },
+  { value: "other", label: "Other" },
+];
+
+const FRIEND_SUBGROUP_OPTIONS = [
+  { value: "army", label: "Army / NS" },
+  { value: "primary_school", label: "Primary School" },
+  { value: "secondary_school", label: "Secondary School" },
+  { value: "tertiary", label: "JC / Poly" },
+  { value: "university", label: "University" },
+  { value: "other", label: "Other" },
+];
+
+const PARTY_OPTIONS = [
+  { value: "bride", label: "Bride" },
+  { value: "groom", label: "Groom" },
+];
 
 const styles = theme + `
   .rsvp-wrap {
@@ -126,6 +147,9 @@ export default function RsvpPage() {
   const [attending, setAttending]     = useState(null);
   const [mealChoice, setMealChoice]   = useState("");
   const [dietary, setDietary]         = useState("");
+  const [relationshipGroup, setRelationshipGroup] = useState("");
+  const [friendSubgroup, setFriendSubgroup]        = useState("");
+  const [closerTo, setCloserTo]                    = useState("");
   const [message, setMessage]         = useState("");
   const [error, setError]             = useState("");
   const [submitting, setSubmitting]   = useState(false);
@@ -147,11 +171,14 @@ export default function RsvpPage() {
 
     try {
       await sb.rpc("submit_rsvp_by_name", {
-        p_name:          cleanName(name),
-        p_status:        attending ? "confirmed" : "declined",
-        p_meal_choice:   attending ? mealChoice : "",
-        p_dietary_notes: cleanNotes(dietary),
-        p_message:       cleanNotes(message),
+        p_name:               cleanName(name),
+        p_status:             attending ? "confirmed" : "declined",
+        p_meal_choice:        attending ? mealChoice : "",
+        p_dietary_notes:      cleanNotes(dietary),
+        p_message:            cleanNotes(message),
+        p_relationship_group: cleanRelationshipGroup(relationshipGroup),
+        p_friend_subgroup:    relationshipGroup === "friends" ? cleanFriendSubgroup(friendSubgroup) : "",
+        p_party:              cleanParty(closerTo),
       });
       setDone(true);
     } catch (err) {
@@ -213,6 +240,51 @@ export default function RsvpPage() {
                     ✗&nbsp; Sorry, I can't make it
                   </button>
                 </div>
+              </div>
+
+              {/* Relationship to the couple */}
+              <div className="rsvp-field">
+                <label className="rsvp-label">How do you know the couple?</label>
+                <select
+                  className="rsvp-input"
+                  value={relationshipGroup}
+                  onChange={(e) => { setRelationshipGroup(e.target.value); setFriendSubgroup(""); }}
+                >
+                  <option value="">Select one…</option>
+                  {RELATIONSHIP_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              {relationshipGroup === "friends" && (
+                <div className="rsvp-field">
+                  <label className="rsvp-label">Which kind of friend?</label>
+                  <select
+                    className="rsvp-input"
+                    value={friendSubgroup}
+                    onChange={(e) => setFriendSubgroup(e.target.value)}
+                  >
+                    <option value="">Select one…</option>
+                    {FRIEND_SUBGROUP_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div className="rsvp-field">
+                <label className="rsvp-label">Closer to</label>
+                <select
+                  className="rsvp-input"
+                  value={closerTo}
+                  onChange={(e) => setCloserTo(e.target.value)}
+                >
+                  <option value="">Select one…</option>
+                  {PARTY_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
               </div>
 
               {/* Meal + dietary — only if attending */}

@@ -6,6 +6,10 @@ export const MAX_NAME = 120,
   MAX_TABLE = 20,
   MAX_ANGBAO = 10_000_000;
 export const PARTIES = ["", "bride", "groom"];
+export const RELATIONSHIP_GROUPS = ["", "family", "colleagues", "friends", "other"];
+export const FRIEND_SUBGROUPS = [
+  "", "army", "primary_school", "secondary_school", "tertiary", "university", "other",
+];
 
 export const cleanName = (v) => String(v ?? "").trim().slice(0, MAX_NAME);
 export const cleanNotes = (v) => String(v ?? "").trim().slice(0, MAX_NOTES);
@@ -13,6 +17,14 @@ export const cleanTable = (v) => String(v ?? "").trim().slice(0, MAX_TABLE) || "
 export const cleanParty = (v) => {
   const p = String(v ?? "").toLowerCase().trim();
   return PARTIES.includes(p) ? p : "";
+};
+export const cleanRelationshipGroup = (v) => {
+  const g = String(v ?? "").toLowerCase().trim();
+  return RELATIONSHIP_GROUPS.includes(g) ? g : "";
+};
+export const cleanFriendSubgroup = (v) => {
+  const s = String(v ?? "").toLowerCase().trim();
+  return FRIEND_SUBGROUPS.includes(s) ? s : "";
 };
 export const cleanAmount = (v) => {
   const n = parseFloat(v);

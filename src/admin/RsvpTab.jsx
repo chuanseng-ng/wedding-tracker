@@ -2,6 +2,19 @@ import { useState } from "react";
 
 const MEAL_OPTIONS = ["", "Halal", "Vegetarian", "Normal"];
 
+const RELATIONSHIP_OPTIONS = [
+  ["", "Not set"], ["family", "Family"], ["colleagues", "Colleagues"],
+  ["friends", "Friends"], ["other", "Other"],
+];
+const FRIEND_SUBGROUP_OPTIONS = [
+  ["", "Not set"], ["army", "Army / NS"], ["primary_school", "Primary School"],
+  ["secondary_school", "Secondary School"], ["tertiary", "JC / Poly"],
+  ["university", "University"], ["other", "Other"],
+];
+const PARTY_OPTIONS = [
+  ["", "Not set"], ["bride", "Bride"], ["groom", "Groom"],
+];
+
 const styles = `
   .rsvp-tab { display: flex; flex-direction: column; gap: 20px; }
   .rsvp-stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
@@ -91,6 +104,9 @@ export default function RsvpTab({ guests, onUpdate, showToast }) {
       meal_choice: g.meal_choice || "",
       plus_one_name: g.plus_one_name || "",
       dietary_notes: g.dietary_notes || "",
+      relationship_group: g.relationship_group || "",
+      friend_subgroup: g.friend_subgroup || "",
+      party: g.party || "",
     });
   };
 
@@ -100,6 +116,9 @@ export default function RsvpTab({ guests, onUpdate, showToast }) {
       meal_choice: editForm.meal_choice,
       plus_one_name: editForm.plus_one_name,
       dietary_notes: editForm.dietary_notes,
+      relationship_group: editForm.relationship_group,
+      friend_subgroup: editForm.relationship_group === "friends" ? editForm.friend_subgroup : "",
+      party: editForm.party,
     };
     if (editForm.rsvp_status !== (g.rsvp_status || "pending")) {
       patch.rsvp_at = new Date().toISOString();
@@ -204,6 +223,11 @@ export default function RsvpTab({ guests, onUpdate, showToast }) {
                     <div className="rsvp-guest-meta">
                       {[
                         g.party ? `${g.party} side` : null,
+                        g.relationship_group
+                          ? (g.relationship_group === "friends" && g.friend_subgroup
+                              ? `friend (${g.friend_subgroup.replace(/_/g, " ")})`
+                              : g.relationship_group)
+                          : null,
                         g.plus_one_name?.trim() ? `+1: ${g.plus_one_name}` : null,
                         g.dietary_notes?.trim() || null,
                       ]
@@ -293,6 +317,50 @@ export default function RsvpTab({ guests, onUpdate, showToast }) {
                         placeholder="e.g. No pork, Halal…"
                       />
                     </div>
+                    <div className="rsvp-edit-group">
+                      <label className="rsvp-edit-label">Side</label>
+                      <select
+                        className="rsvp-edit-select"
+                        value={editForm.party}
+                        onChange={(e) =>
+                          setEditForm({ ...editForm, party: e.target.value })
+                        }
+                      >
+                        {PARTY_OPTIONS.map(([v, l]) => (
+                          <option key={v} value={v}>{l}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="rsvp-edit-group">
+                      <label className="rsvp-edit-label">Relationship</label>
+                      <select
+                        className="rsvp-edit-select"
+                        value={editForm.relationship_group}
+                        onChange={(e) =>
+                          setEditForm({ ...editForm, relationship_group: e.target.value, friend_subgroup: "" })
+                        }
+                      >
+                        {RELATIONSHIP_OPTIONS.map(([v, l]) => (
+                          <option key={v} value={v}>{l}</option>
+                        ))}
+                      </select>
+                    </div>
+                    {editForm.relationship_group === "friends" && (
+                      <div className="rsvp-edit-group">
+                        <label className="rsvp-edit-label">Friend Type</label>
+                        <select
+                          className="rsvp-edit-select"
+                          value={editForm.friend_subgroup}
+                          onChange={(e) =>
+                            setEditForm({ ...editForm, friend_subgroup: e.target.value })
+                          }
+                        >
+                          {FRIEND_SUBGROUP_OPTIONS.map(([v, l]) => (
+                            <option key={v} value={v}>{l}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                     <div className="rsvp-edit-footer">
                       <button
                         className="rsvp-btn rsvp-btn-cancel"
