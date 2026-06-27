@@ -44,8 +44,10 @@ function makeTimeOpts(startH, endH) {
   return opts;
 }
 
-// Ceremony: 9 AM – 6 PM
+// Solemnisation: 9 AM – 6 PM
 const CEREMONY_TIME_OPTIONS = makeTimeOpts(9, 18);
+// Tea ceremony: typically morning, 8 AM – 1 PM
+const TEA_CEREMONY_TIME_OPTIONS = makeTimeOpts(8, 13);
 // Meal groups
 const LUNCH_TIME_OPTIONS = makeTimeOpts(12, 16);
 const DINNER_TIME_OPTIONS = makeTimeOpts(17, 22);
@@ -58,6 +60,7 @@ const blankForm = {
   venue_address: "",
   ceremony_time: "",
   dinner_time: "",
+  tea_ceremony_time: "",
 };
 
 export default function WeddingSetupTab({ wedding, onSave, showToast }) {
@@ -74,6 +77,7 @@ export default function WeddingSetupTab({ wedding, onSave, showToast }) {
         venue_address: wedding.venue_address || "",
         ceremony_time: wedding.ceremony_time || "",
         dinner_time: wedding.dinner_time || "",
+        tea_ceremony_time: wedding.tea_ceremony_time || "",
       });
     }
   }, [wedding]);
@@ -148,9 +152,15 @@ export default function WeddingSetupTab({ wedding, onSave, showToast }) {
             </div>
 
             <div className="setup-form-group">
-              <label className="setup-form-label">Ceremony time</label>
+              <label className="setup-form-label">Solemnisation time</label>
               <select className="setup-form-select" value={form.ceremony_time} onChange={set("ceremony_time")}>
                 {CEREMONY_TIME_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </div>
+            <div className="setup-form-group">
+              <label className="setup-form-label">Tea ceremony time <span style={{ color: "var(--brown)", fontWeight: 400 }}>(optional)</span></label>
+              <select className="setup-form-select" value={form.tea_ceremony_time} onChange={set("tea_ceremony_time")}>
+                {TEA_CEREMONY_TIME_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
             </div>
             <div className="setup-form-group">

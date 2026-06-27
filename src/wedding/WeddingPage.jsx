@@ -22,6 +22,7 @@ const DEMO_WEDDING = {
   venue_address: "123 Orchard Road, Singapore 238858",
   ceremony_time: "14:00",
   dinner_time: "19:00",
+  tea_ceremony_time: "10:00",
   slug: "wei-ming-and-siew-yong",
   love_story: "We met at a mutual friend's birthday party in 2019. Wei Ming spilled a drink on Siew Yong's dress and offered to buy her dinner to apologise. She said yes, mostly for the free food. Five years later, here we are.",
   dress_code: "Smart Casual — think garden party chic!",
@@ -328,8 +329,8 @@ export default function WeddingPage() {
   }
 
   const { bride_name, groom_name, wedding_date, venue_name, venue_address,
-          ceremony_time, dinner_time, love_story, dress_code, hero_image_url,
-          rsvp_deadline, is_published } = wedding;
+          ceremony_time, dinner_time, tea_ceremony_time, love_story, dress_code,
+          hero_image_url, rsvp_deadline, is_published } = wedding;
 
   const coupleNames = `${groom_name} & ${bride_name}`;
 
@@ -420,13 +421,23 @@ export default function WeddingPage() {
             <div className="wp-section-eyebrow">The Big Day</div>
             <div className="wp-section-title">Event details</div>
             <div className="wp-events">
+              {tea_ceremony_time && (
+                <div className="wp-event">
+                  <div className="wp-event-icon">🍵</div>
+                  <div className="wp-event-body">
+                    <div className="wp-event-label">Tea Ceremony</div>
+                    <div className="wp-event-value">{fmt12h(tea_ceremony_time)}</div>
+                    {wedding_date && <div className="wp-event-sub">{formatLongDate(wedding_date)}</div>}
+                  </div>
+                </div>
+              )}
               {ceremony_time && (
                 <div className="wp-event">
                   <div className="wp-event-icon">💍</div>
                   <div className="wp-event-body">
-                    <div className="wp-event-label">Ceremony</div>
+                    <div className="wp-event-label">Solemnisation</div>
                     <div className="wp-event-value">{fmt12h(ceremony_time)}</div>
-                    {wedding_date && <div className="wp-event-sub">{formatLongDate(wedding_date)}</div>}
+                    {!tea_ceremony_time && wedding_date && <div className="wp-event-sub">{formatLongDate(wedding_date)}</div>}
                   </div>
                 </div>
               )}
