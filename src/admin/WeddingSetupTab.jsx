@@ -44,13 +44,11 @@ function makeTimeOpts(startH, endH) {
   return opts;
 }
 
-// Solemnisation: 9 AM – 6 PM
-const CEREMONY_TIME_OPTIONS = makeTimeOpts(9, 18);
-// Tea ceremony: typically morning, 8 AM – 1 PM
-const TEA_CEREMONY_TIME_OPTIONS = makeTimeOpts(8, 13);
+// Solemnisation + tea ceremony: no constraint
+const ALL_TIME_OPTIONS = makeTimeOpts(0, 23);
 // Meal groups
 const LUNCH_TIME_OPTIONS = makeTimeOpts(12, 16);
-const DINNER_TIME_OPTIONS = makeTimeOpts(17, 22);
+const DINNER_TIME_OPTIONS = makeTimeOpts(16, 22);
 
 const blankForm = {
   bride_name: "",
@@ -154,13 +152,13 @@ export default function WeddingSetupTab({ wedding, onSave, showToast }) {
             <div className="setup-form-group">
               <label className="setup-form-label">Solemnisation time</label>
               <select className="setup-form-select" value={form.ceremony_time} onChange={set("ceremony_time")}>
-                {CEREMONY_TIME_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                {ALL_TIME_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
             </div>
             <div className="setup-form-group">
               <label className="setup-form-label">Tea ceremony time <span style={{ color: "var(--brown)", fontWeight: 400 }}>(optional)</span></label>
               <select className="setup-form-select" value={form.tea_ceremony_time} onChange={set("tea_ceremony_time")}>
-                {TEA_CEREMONY_TIME_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                {ALL_TIME_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
             </div>
             <div className="setup-form-group">
@@ -170,7 +168,7 @@ export default function WeddingSetupTab({ wedding, onSave, showToast }) {
                 <optgroup label="Lunch (12 PM – 4 PM)">
                   {LUNCH_TIME_OPTIONS.slice(1).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </optgroup>
-                <optgroup label="Dinner (5 PM – 10 PM)">
+                <optgroup label="Evening Reception (4 PM – 10 PM)">
                   {DINNER_TIME_OPTIONS.slice(1).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </optgroup>
               </select>
