@@ -1,6 +1,6 @@
 import { supabaseAdmin } from "./_lib/supabaseAdmin.js";
 import { buildIcs } from "./_lib/ics.js";
-import { sendEmail, getFromAddress } from "./_lib/emailProvider.js";
+import { sendEmail, getFromAddress, missingEmailEnvVars } from "./_lib/emailProvider.js";
 
 // Webhook target for the `guests_rsvp_status_webhook` Postgres trigger
 // (supabase/migrations/0005_email_automation.sql). Verifies the shared
@@ -10,6 +10,11 @@ import { sendEmail, getFromAddress } from "./_lib/emailProvider.js";
 // (EMAIL_PROVIDER=resend|brevo).
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).end();
+
+  const missing = missingEmailEnvVars();
+  if (missing.length > 0) {
+    return res.status(500).json({ error: `Missing env vars: ${missing.join(", ")}` });
+  }
 
   const secret = process.env.RSVP_WEBHOOK_SECRET;
   if (!secret || req.headers["x-webhook-secret"] !== secret) {

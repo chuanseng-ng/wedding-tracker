@@ -1,5 +1,5 @@
 import { supabaseAdmin } from "./_lib/supabaseAdmin.js";
-import { sendEmail, getFromAddress } from "./_lib/emailProvider.js";
+import { sendEmail, getFromAddress, missingEmailEnvVars } from "./_lib/emailProvider.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -15,6 +15,11 @@ function daysUntil(dateStr) {
 // column per the roadmap: the 90-day branch only fires while it's still
 // null; the 30-day branch is reachable again afterward.
 export default async function handler(req, res) {
+  const missing = missingEmailEnvVars();
+  if (missing.length > 0) {
+    return res.status(500).json({ error: `Missing env vars: ${missing.join(", ")}` });
+  }
+
   const cronSecret = process.env.CRON_SECRET;
   if (cronSecret && req.headers.authorization !== `Bearer ${cronSecret}`) {
     return res.status(401).json({ error: "unauthorized" });
