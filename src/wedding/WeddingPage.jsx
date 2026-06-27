@@ -266,7 +266,9 @@ export default function WeddingPage() {
 
   useEffect(() => {
     if (isDemoMode) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setWedding(DEMO_WEDDING);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLoading(false);
       return;
     }

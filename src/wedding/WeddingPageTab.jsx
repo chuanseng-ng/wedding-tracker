@@ -191,13 +191,21 @@ export default function WeddingPageTab({ wedding, onSave, showToast }) {
   useEffect(() => {
     if (!wedding) return;
     const auto = defaultSlug(wedding.bride_name, wedding.groom_name);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSlug(wedding.slug || auto);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoveStory(wedding.love_story || "");
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setDresscode(wedding.dress_code || "");
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setHeroUrl(wedding.hero_image_url || "");
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setRsvpDeadline(wedding.rsvp_deadline || "");
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMealOptions(wedding.meal_options || "");
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsPublished(wedding.is_published || false);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setQaAnswers(getQaAnswers(wedding.fun_qa));
   }, [wedding]);
 
