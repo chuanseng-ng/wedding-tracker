@@ -491,8 +491,9 @@ Options:
 
 ## Housekeeping (deferred — once MVP is running)
 
-- Vercel env var setup is manual/one-at-a-time (`vercel env add` per variable) — see [issue #17](https://github.com/shangweisong/wedding-tracker/issues/17), which also covers the Resend sandbox-sender → verified-domain decision still pending.
-- The Supabase Vault `vault.create_secret(...)` step for the RSVP email webhook is a manual SQL step with no UI — also tracked in issue #17.
+- ✅ Vercel env var setup automated via `scripts/setup-vercel-env.sh` — reads `.env`, detects provider, pushes all server-only vars to Vercel in one command ([PR #26](https://github.com/shangweisong/wedding-tracker/pull/26), closes [issue #17](https://github.com/shangweisong/wedding-tracker/issues/17) setup-script part).
+- ✅ Pluggable email provider — `EMAIL_PROVIDER=gmail` (default, no domain needed) or `EMAIL_PROVIDER=resend` (custom domain). Brevo removed due to incompatibility with Vercel's dynamic IPs ([PR #26](https://github.com/shangweisong/wedding-tracker/pull/26)).
+- The Supabase Vault `vault.create_secret(...)` step for the RSVP email webhook remains a manual one-time SQL step — documented in README step 6 and tracked in [issue #17](https://github.com/shangweisong/wedding-tracker/issues/17).
 - ✅ `supabase/migrations/` consolidated from 10 files → 5 files ([PR #25](https://github.com/shangweisong/wedding-tracker/pull/25), closes [issue #19](https://github.com/shangweisong/wedding-tracker/issues/19)). New structure:
   - `0001_init.sql` — guests table + trigger (unchanged)
   - `0002_draw_and_submissions.sql` — draw numbers + submissions (unchanged)

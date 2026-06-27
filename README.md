@@ -71,12 +71,10 @@ Open the **SQL Editor** in your Supabase dashboard and run the migrations **in o
 | File | What it creates |
 |---|---|
 | [`0001_init.sql`](supabase/migrations/0001_init.sql) | `guests` table, RLS policies, `set_updated_at` trigger |
-| [`0002_draw_and_submissions.sql`](supabase/migrations/0002_draw_and_submissions.sql) | **Lucky-draw number** (`draw_number`, minted when an ang-bao is confirmed), the **guest receipt-upload queue** (`submissions` table), and a private `receipts` storage bucket. Guests can only *insert* a pending submission / *upload* a file — never read, list, or approve; helpers review from the **Submissions** tab. |
-| [`0003_phase2_rsvp_seating.sql`](supabase/migrations/0003_phase2_rsvp_seating.sql) | `tables` table; RSVP columns on guests (`rsvp_status`, `rsvp_token`, `meal_choice`, etc.); 3 public RPC functions for the RSVP form |
-| [`0004_fuzzy_rsvp_by_name.sql`](supabase/migrations/0004_fuzzy_rsvp_by_name.sql) | `pg_trgm` extension; `submit_rsvp_by_name` RPC for fuzzy name-based RSVP submission |
-| [`0005_phase3_relationship_taxonomy.sql`](supabase/migrations/0005_phase3_relationship_taxonomy.sql) | `relationship_group`/`friend_subgroup` columns on guests for the 3-tier side/category/friend-subtype taxonomy used by RSVP + draft seating |
-| [`0006_email_automation.sql`](supabase/migrations/0006_email_automation.sql) | `email`/`last_reminder_sent_at` columns on guests; RSVP confirmation-email webhook trigger; updated RPCs to accept `email` |
-| [`0007_wedding_setup.sql`](supabase/migrations/0007_wedding_setup.sql) | Singleton `weddings` table + `get_wedding_config`/`upsert_wedding_config` RPCs, replacing the old wedding-detail env vars (`WEDDING_DATE`, `CEREMONY_TIME`, `DINNER_TIME`, `VENUE_NAME`, `VENUE_ADDRESS`, `COUPLE_NAMES`) with the **Wedding Setup** admin tab |
+| [`0002_draw_and_submissions.sql`](supabase/migrations/0002_draw_and_submissions.sql) | Lucky-draw number, guest receipt-upload queue (`submissions` table), private `receipts` storage bucket |
+| [`0003_rsvp_seating.sql`](supabase/migrations/0003_rsvp_seating.sql) | `tables` table; all RSVP columns on guests (`rsvp_status`, `meal_choice`, `email`, etc.); fuzzy name-match RPC (`submit_rsvp_by_name`); relationship taxonomy columns |
+| [`0004_weddings.sql`](supabase/migrations/0004_weddings.sql) | Singleton `weddings` table; wedding page columns (slug, love story, hero photo, etc.); `get_wedding_config` / `upsert_wedding_config` / `get_public_wedding` RPCs; photo storage bucket |
+| [`0005_email_automation.sql`](supabase/migrations/0005_email_automation.sql) | `pg_net` extension; RSVP status-change webhook trigger; `last_reminder_sent_at` column — **apply only after completing the email setup in step 6** |
 
 All migrations are idempotent (`CREATE OR REPLACE`, `IF NOT EXISTS`) — safe to re-run.
 
@@ -141,7 +139,130 @@ To test multi-device sync on the same WiFi, use your computer's LAN IP instead o
 
 ---
 
-## Adding guests
+## 6. Email automation (optional)
+
+When a guest submits the RSVP form, they receive a confirmation email with a `.ics` calendar invite attached. Guests who haven't responded receive reminder emails 90 days and 30 days before the wedding.
+
+This is powered by a Supabase webhook trigger → Vercel serverless function. Two email providers are supported.
+
+---
+
+### Choose a provider
+
+Set `EMAIL_PROVIDER` in your Vercel environment variables:
+
+| Provider | `EMAIL_PROVIDER` | Requires | Best for |
+|---|---|---|---|
+| **Gmail** (default) | `gmail` | A Gmail App Password | Anyone — no domain needed |
+| **Resend** | `resend` | A verified sending domain | Custom `rsvp@yourdomain.com` address |
+
+---
+
+### Option A — Gmail (recommended, no domain needed)
+
+Gmail sends from your existing Google account. No domain purchase, no service approval, no IP restrictions. Limit is 500 emails/day — well above any wedding guest list.
+
+**Step 1 — Enable 2-Step Verification on your Google account**
+
+Go to [myaccount.google.com/security](https://myaccount.google.com/security) and turn on 2-Step Verification if it isn't already on. (App Passwords require this.)
+
+**Step 2 — Create an App Password**
+
+1. Go to [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords)
+2. Under "App name", type `wedding tracker`
+3. Click **Create** — Google generates a 16-character password
+4. Copy it (you won't see it again)
+
+**Step 3 — Add env vars to your `.env`**
+
+```
+EMAIL_PROVIDER=gmail
+GMAIL_FROM=yourname@gmail.com
+GMAIL_APP_PASSWORD=xxxx xxxx xxxx xxxx
+```
+
+---
+
+### Option B — Resend (custom sending domain)
+
+Resend sends from `rsvp@yourdomain.com`. Better deliverability and a more professional appearance. Requires a domain you control so you can add DNS records.
+
+**Step 1 — Buy a domain**
+
+Any registrar works — [Cloudflare Registrar](https://www.cloudflare.com/products/registrar/) (~$8–12/yr) is recommended (no markup on wholesale prices).
+
+**Step 2 — Verify the domain in Resend**
+
+1. Sign up at [resend.com](https://resend.com) and go to **Domains → Add Domain**
+2. Enter your domain (e.g. `mail.yourdomain.com`)
+3. Resend gives you two DNS records to add — an SPF `TXT` record and a DKIM `TXT` record
+4. Add them in your domain registrar's DNS settings
+5. Click **Verify** in Resend — usually takes a few minutes
+
+**Step 3 — Create an API key**
+
+Go to **Resend → API Keys → Create API key**. Copy it.
+
+**Step 4 — Add env vars to your `.env`**
+
+```
+EMAIL_PROVIDER=resend
+RESEND_API_KEY=re_xxxxxxxxxxxx
+RESEND_SENDING_DOMAIN=mail.yourdomain.com
+```
+
+---
+
+### Push env vars to Vercel
+
+Instead of adding variables one-by-one in the Vercel dashboard, use the included setup script. It reads your `.env`, detects which provider you've chosen, and pushes the right set of variables to Vercel (production + preview + development) in one command.
+
+**Preview what will be pushed (no changes made):**
+```bash
+bash scripts/setup-vercel-env.sh --dry-run
+```
+
+**Push to Vercel:**
+```bash
+bash scripts/setup-vercel-env.sh
+```
+
+Then redeploy:
+```bash
+vercel --prod
+```
+
+---
+
+### Wire up the Supabase webhook
+
+This is a one-time step in the **Supabase SQL Editor**. It tells Supabase where to call when a guest RSVPs.
+
+**Step 1 — Apply the email automation migration** (if you haven't already):
+
+Run [`0005_email_automation.sql`](supabase/migrations/0005_email_automation.sql) in the SQL Editor.
+
+**Step 2 — Register the webhook URL and secret in Supabase Vault:**
+
+```sql
+select vault.create_secret(
+  'https://<your-app>.vercel.app/api/send-rsvp-email',
+  'rsvp_email_webhook_url'
+);
+
+select vault.create_secret(
+  '<same value as RSVP_WEBHOOK_SECRET in your .env>',
+  'rsvp_email_webhook_secret'
+);
+```
+
+Replace `<your-app>` with your Vercel project URL (e.g. `wedding-tracker-eight.vercel.app`).
+
+The trigger silently no-ops until both secrets exist — guests can RSVP normally, emails just won't send yet.
+
+---
+
+### Adding guests
 
 ### Via the app
 Admin → D-Day mode → toolbar → **Add Guest** or **Import CSV**.
@@ -248,3 +369,7 @@ No backend of its own — the database is the trust boundary.
 | "Not saved — check connection" | A write failed (usually flaky WiFi). The optimistic change stays on screen and reconciles on next sync. Use JSON **Backup** as a safety net. |
 | Import fails / 400 error | Check browser console. Verify env vars and that CSV columns match the format above. |
 | Angbao tab / 🧧 buttons / #pay page are missing | The ang-bao feature is turned off. Set `VITE_ENABLE_ANGBAO=true` (or remove the variable) and rebuild/redeploy. No data is lost while it's off. |
+| Confirmation email not arriving | Check Vercel function logs: `vercel logs --environment production --since 1h --source serverless --no-branch --expand`. A `500 Missing env vars` means the Vercel env vars weren't pushed — run `bash scripts/setup-vercel-env.sh`. No log at all means the Supabase Vault secrets aren't configured — run the `vault.create_secret(...)` SQL above. |
+| Gmail — "Invalid login" error | Your regular Gmail password won't work. You must use a **Gmail App Password** (16-char code from [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords)). Also requires 2-Step Verification to be on. |
+| Resend — emails only arrive to your own inbox | You're in Resend sandbox mode (no verified domain yet). Complete Option B above to send to real guests. |
+| RSVP triggers email but guest doesn't receive it | Check spam/junk folder. Gmail-to-Gmail or Gmail-to-Outlook may land there occasionally. Ask the guest to mark it not-spam. |
