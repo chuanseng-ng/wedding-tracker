@@ -1,5 +1,5 @@
-import { Resend } from "resend";
 import { supabaseAdmin } from "./_lib/supabaseAdmin.js";
+import { sendEmail, getFromAddress, missingEmailEnvVars } from "./_lib/emailProvider.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -15,6 +15,11 @@ function daysUntil(dateStr) {
 // column per the roadmap: the 90-day branch only fires while it's still
 // null; the 30-day branch is reachable again afterward.
 export default async function handler(req, res) {
+  const missing = missingEmailEnvVars();
+  if (missing.length > 0) {
+    return res.status(500).json({ error: `Missing env vars: ${missing.join(", ")}` });
+  }
+
   const cronSecret = process.env.CRON_SECRET;
   if (cronSecret && req.headers.authorization !== `Bearer ${cronSecret}`) {
     return res.status(401).json({ error: "unauthorized" });
@@ -36,9 +41,14 @@ export default async function handler(req, res) {
 
   if (error) return res.status(500).json({ error: error.message });
 
-  const resend = new Resend(process.env.RESEND_API_KEY);
+  let fromAddress;
+  try {
+    fromAddress = getFromAddress();
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
+  }
+
   const coupleNames = `${wedding.bride_name} & ${wedding.groom_name}`;
-  const fromAddress = process.env.RESEND_FROM_EMAIL || `rsvp@${process.env.RESEND_SENDING_DOMAIN}`;
   let sent = 0;
 
   for (const guest of guests) {
@@ -46,8 +56,9 @@ export default async function handler(req, res) {
     const isSecondReminder = days <= 30 && !isFirstReminder;
     if (!isFirstReminder && !isSecondReminder) continue;
 
-    await resend.emails.send({
-      from: `${coupleNames} <${fromAddress}>`,
+    await sendEmail({
+      from: coupleNames,
+      fromAddress,
       to: guest.email,
       subject: `Reminder: RSVP for ${coupleNames}'s Wedding`,
       html: `<p>Hi ${guest.name},</p><p>Just a friendly reminder to RSVP for our wedding on ${weddingDate} — we'd love to know if you can make it!</p>`,
