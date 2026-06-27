@@ -21,7 +21,7 @@ A quick-scan list of known bugs, deferred work, and housekeeping. Details live i
 | 1 | RSVP | **Fuzzy name match false-positive** — `submit_rsvp_by_name` reports "ambiguous" when one guest's name is a prefix of another's (e.g. `alice` vs `alice smith`). Token-based update flow bypasses this. [Issue #18](https://github.com/shangweisong/wedding-tracker/issues/18) | §3.1 |
 | 2 | Email | **Supabase Vault webhook setup is manual** — `vault.create_secret(...)` cannot be scripted; must be done once in the SQL Editor. [Issue #17](https://github.com/shangweisong/wedding-tracker/issues/17) | §Housekeeping |
 | 3 | Wedding Page | **Single template only** — only the Minimal dark-gold theme exists. Additional templates (Floral, Modern, Traditional, Garden) and accent colour picker are pending. | §3.3 |
-| 4 | Docs | **README → User Guide split** — README is getting long; detailed setup steps (email, Supabase, env vars) should move to `docs/USER_GUIDE.md`. | §Housekeeping |
+| 4 | Docs | ~~**README → User Guide split**~~ ✅ — `docs/USER_GUIDE.md` created; README is now a 1-page overview + quick-start. | §Housekeeping |
 | 5 | Migrations | **Migration consolidation** — `0006_rsvp_host_notify.sql` patches the trigger from `0005`. Both should be consolidated for clean new deployments, and the README setup table updated. | §Housekeeping |
 
 ---
@@ -567,7 +567,7 @@ Options:
   - `0005_email_automation.sql` — **optional**, apply after Resend + Vercel are configured
   - `reconcile_remote_db.sql` — run once in Supabase SQL Editor on existing projects to sync migration tracking
 - **Migration consolidation needed** — `0006_rsvp_host_notify.sql` is a small patch that updates the trigger from `0005`. For a clean new-deployment experience, `0005` and `0006` should be merged into a single file. Also: the README setup table currently only lists `0001`–`0005` and needs updating. Do this as a dedicated housekeeping pass so existing deployments aren't disrupted.
-- **README → User Guide split** — README has grown long with detailed setup instructions (email provider setup, Supabase Vault wiring, CSV format, PayNow, angbao). Extract these into `docs/USER_GUIDE.md` with step-by-step guidance. README becomes a 1-page overview + quick-start that links out to the guide for depth.
+- ✅ **README → User Guide split** — detailed setup instructions (Supabase, email, Vercel, CSV, PayNow, angbao) extracted to [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md). README is now a 1-page overview + quick-start that links to the guide for depth.
 
 ---
 

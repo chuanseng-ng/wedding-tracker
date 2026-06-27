@@ -1,0 +1,352 @@
+# Wedding Tracker — User Guide
+
+Full step-by-step setup and reference for the Wedding Tracker app.
+For a feature overview, see the [README](../README.md).
+
+---
+
+## Table of contents
+
+1. [Set up Supabase](#1-set-up-supabase)
+2. [Configure environment variables](#2-configure-environment-variables)
+3. [Run locally](#3-run-locally)
+4. [Deploy to Vercel](#4-deploy-to-vercel)
+5. [Email automation](#5-email-automation)
+6. [Adding guests](#6-adding-guests)
+7. [Workflow](#7-workflow)
+8. [PayNow ang-bao QR](#8-paynow-ang-bao-qr)
+9. [Disabling angbao tracking](#9-disabling-angbao-tracking)
+10. [Security](#10-security)
+11. [Troubleshooting](#11-troubleshooting)
+
+---
+
+## 1. Set up Supabase
+
+### 1a. Database migrations
+
+Open the **SQL Editor** in your Supabase dashboard and run the migrations **in order**:
+
+| File | What it creates |
+|---|---|
+| [`0001_init.sql`](../supabase/migrations/0001_init.sql) | `guests` table, RLS policies, `set_updated_at` trigger |
+| [`0002_draw_and_submissions.sql`](../supabase/migrations/0002_draw_and_submissions.sql) | Lucky-draw number, guest receipt-upload queue (`submissions` table), private `receipts` storage bucket |
+| [`0003_rsvp_seating.sql`](../supabase/migrations/0003_rsvp_seating.sql) | `tables` table; all RSVP columns on guests (`rsvp_status`, `meal_choice`, `email`, etc.); fuzzy name-match RPC (`submit_rsvp_by_name`); relationship taxonomy columns |
+| [`0004_weddings.sql`](../supabase/migrations/0004_weddings.sql) | Singleton `weddings` table; wedding page columns (slug, love story, hero photo, etc.); `get_wedding_config` / `upsert_wedding_config` / `get_public_wedding` RPCs; photo storage bucket |
+| [`0005_email_automation.sql`](../supabase/migrations/0005_email_automation.sql) | `pg_net` extension; RSVP status-change webhook trigger; `last_reminder_sent_at` column — **apply only after completing the email setup in step 5** |
+
+All migrations are idempotent (`CREATE OR REPLACE`, `IF NOT EXISTS`) — safe to re-run.
+
+> Never use `for all using (true)` — that exposes the entire guest list to anyone with the public anon key.
+
+### 1b. Helper login
+
+Under **Authentication → Users**, add one user (e.g. `helpers@wedding.local`) with a strong password. That password is the **access code**.
+
+Under **Authentication → Providers → Email**, turn off "Allow new users to sign up".
+
+### 1c. API keys
+
+Under **Project Settings → API**, copy your **Project URL** and **anon public key**.
+
+---
+
+## 2. Configure environment variables
+
+```bash
+cp .env.example .env
+```
+
+### Frontend variables (`VITE_` prefix — exposed to browser)
+
+```
+VITE_SUPABASE_URL=https://xxxxxxxxxxxx.supabase.co
+VITE_SUPABASE_ANON_KEY=eyJ...your anon key...
+VITE_HELPER_EMAIL=helpers@wedding.local   # must match the helper account; not secret
+
+# Optional — auto-signs in so the DB works without the PIN screen
+VITE_HELPER_PASSWORD=your-access-code
+
+# Optional — enables the PayNow ang-bao page (Singapore). Not secret.
+VITE_PAYNOW_MOBILE=+6591234567            # the couple's PayNow-linked mobile
+VITE_PAYNOW_NAME=The Happy Couple         # name shown to guests
+
+# Optional — set to "false" to hide all ang-bao tracking. Default on.
+VITE_ENABLE_ANGBAO=true
+```
+
+### Server-only variables (no `VITE_` — never expose to client)
+
+These are only used by Vercel serverless functions. **Never add `VITE_` to these.**
+
+```
+SUPABASE_SERVICE_ROLE_KEY=eyJ...your service role key...
+RESEND_API_KEY=re_xxxxxxxxxxxx            # if using Resend
+GMAIL_FROM=yourname@gmail.com             # if using Gmail
+GMAIL_APP_PASSWORD=xxxx xxxx xxxx xxxx   # if using Gmail
+EMAIL_PROVIDER=gmail                      # "gmail" (default) or "resend"
+RESEND_SENDING_DOMAIN=mail.yourdomain.com # if using Resend
+RSVP_WEBHOOK_SECRET=a-random-secret      # shared between Supabase Vault and Vercel
+SITE_URL=https://your-app.vercel.app     # base URL for token links in emails
+HOST_EMAIL=your@email.com               # receives change-of-mind RSVP notifications
+```
+
+`.env` is gitignored — never commit it.
+
+---
+
+## 3. Run locally
+
+```bash
+npm run dev
+```
+
+Open `http://localhost:5173` for the admin. Open `http://localhost:5173/rsvp` to see the guest RSVP form.
+
+To test multi-device sync on the same WiFi, use your computer's LAN IP instead of `localhost`.
+
+To test Vercel serverless functions locally:
+
+```bash
+vercel dev
+```
+
+This requires the Vercel CLI and a local `.env` with the server-only variables filled in.
+
+---
+
+## 4. Deploy to Vercel
+
+1. Import the repo at [vercel.com](https://vercel.com) (or run `vercel`) for automatic GitHub deploys.
+2. Add the `VITE_*` env vars from step 2 under **Settings → Environment Variables**.
+3. Add the server-only env vars — use the setup script (see [Push env vars to Vercel](#push-env-vars-to-vercel) in step 5).
+4. Deploy. Security headers (CSP, HSTS, X-Frame-Options, etc.) are applied automatically via [`vercel.json`](../vercel.json).
+
+---
+
+## 5. Email automation
+
+When a guest submits the RSVP form, they receive a confirmation email with a `.ics` calendar invite attached. Guests who haven't responded receive reminder emails 90 days and 30 days before the wedding. When a guest changes their RSVP status (confirmed ↔ declined), you receive a notification at `HOST_EMAIL`.
+
+This is powered by a Supabase webhook trigger → Vercel serverless function.
+
+### Choose a provider
+
+Set `EMAIL_PROVIDER` in your environment variables:
+
+| Provider | `EMAIL_PROVIDER` | Requires | Best for |
+|---|---|---|---|
+| **Gmail** (default) | `gmail` | A Gmail App Password | Anyone — no domain needed |
+| **Resend** | `resend` | A verified sending domain | Custom `rsvp@yourdomain.com` address |
+
+---
+
+### Option A — Gmail (recommended, no domain needed)
+
+Gmail sends from your existing Google account. No domain purchase, no service approval, no IP restrictions. Limit is 500 emails/day — well above any wedding guest list.
+
+**Step 1 — Enable 2-Step Verification on your Google account**
+
+Go to [myaccount.google.com/security](https://myaccount.google.com/security) and turn on 2-Step Verification if it isn't already on. (App Passwords require this.)
+
+**Step 2 — Create an App Password**
+
+1. Go to [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords)
+2. Under "App name", type `wedding tracker`
+3. Click **Create** — Google generates a 16-character password
+4. Copy it (you won't see it again)
+
+**Step 3 — Add env vars to your `.env`**
+
+```
+EMAIL_PROVIDER=gmail
+GMAIL_FROM=yourname@gmail.com
+GMAIL_APP_PASSWORD=xxxx xxxx xxxx xxxx
+```
+
+---
+
+### Option B — Resend (custom sending domain)
+
+Resend sends from `rsvp@yourdomain.com`. Better deliverability and a more professional appearance. Requires a domain you control so you can add DNS records.
+
+**Step 1 — Buy a domain**
+
+Any registrar works — [Cloudflare Registrar](https://www.cloudflare.com/products/registrar/) (~$8–12/yr) is recommended (no markup on wholesale prices).
+
+**Step 2 — Verify the domain in Resend**
+
+1. Sign up at [resend.com](https://resend.com) and go to **Domains → Add Domain**
+2. Enter your domain (e.g. `mail.yourdomain.com`)
+3. Resend gives you two DNS records to add — an SPF `TXT` record and a DKIM `TXT` record
+4. Add them in your domain registrar's DNS settings
+5. Click **Verify** in Resend — usually takes a few minutes
+
+**Step 3 — Create an API key**
+
+Go to **Resend → API Keys → Create API key**. Copy it.
+
+**Step 4 — Add env vars to your `.env`**
+
+```
+EMAIL_PROVIDER=resend
+RESEND_API_KEY=re_xxxxxxxxxxxx
+RESEND_SENDING_DOMAIN=mail.yourdomain.com
+```
+
+---
+
+### Push env vars to Vercel
+
+Instead of adding variables one-by-one in the Vercel dashboard, use the included setup script. It reads your `.env`, detects which provider you've chosen, and pushes the right set of variables to Vercel (production + preview + development) in one command.
+
+**Preview what will be pushed (no changes made):**
+```bash
+bash scripts/setup-vercel-env.sh --dry-run
+```
+
+**Push to Vercel:**
+```bash
+bash scripts/setup-vercel-env.sh
+```
+
+Then redeploy:
+```bash
+vercel --prod
+```
+
+---
+
+### Wire up the Supabase webhook
+
+This is a one-time step in the **Supabase SQL Editor**. It tells Supabase where to call when a guest RSVPs.
+
+**Step 1 — Apply the email automation migration** (if you haven't already):
+
+Run [`0005_email_automation.sql`](../supabase/migrations/0005_email_automation.sql) in the SQL Editor.
+
+**Step 2 — Register the webhook URL and secret in Supabase Vault:**
+
+```sql
+select vault.create_secret(
+  'https://<your-app>.vercel.app/api/send-rsvp-email',
+  'rsvp_email_webhook_url'
+);
+
+select vault.create_secret(
+  '<same value as RSVP_WEBHOOK_SECRET in your .env>',
+  'rsvp_email_webhook_secret'
+);
+```
+
+Replace `<your-app>` with your Vercel project URL (e.g. `wedding-tracker-eight.vercel.app`).
+
+The trigger silently no-ops until both secrets exist — guests can RSVP normally, emails just won't send yet.
+
+---
+
+## 6. Adding guests
+
+### Via the app
+
+Admin → D-Day mode → toolbar → **Add Guest** or **Import CSV**.
+
+### CSV format
+
+Columns: `name, table, notes, vip, party` — only `name` is required.
+
+| Column | Description | Example |
+|---|---|---|
+| `name` | Full name (**required**) | `Tan Wei Ming` |
+| `table` | Number or label | `1` or `VIP 1` |
+| `notes` | Dietary needs, relationship, etc. | `Vegetarian` |
+| `vip` | `true` / `false` | `true` |
+| `party` | `bride` or `groom` | `groom` |
+
+```
+name,table,notes,vip,party
+Tan Wei Ming,1,Best man,true,groom
+Ahmad Razif,2,Vegetarian,false,groom
+Priya Nair,2,,false,bride
+```
+
+> **Partners and plus-ones:** add them as separate rows so they RSVP independently. Only add them if they are actually invited — not everyone needs a plus one.
+
+---
+
+## 7. Workflow
+
+### Before the wedding
+
+1. Fill in your wedding details in the **Wedding Setup tab** (couple names, date, venue, ceremony/dinner time) — do this first, since the RSVP confirmation email and calendar invite read from it
+2. Import your guest list via CSV (or add guests one by one)
+3. Share `https://your-app.vercel.app/rsvp` in your wedding group chat
+4. Guests fill in the RSVP form — responses appear in the **RSVP tab** in real time
+5. Once RSVPs are in, open the **Seating Plan tab** to assign confirmed guests to tables
+6. Export the seating plan as CSV or print it
+
+### On the wedding day
+
+1. Switch to **💒 D-Day** mode in the header
+2. Give helpers the URL — they check guests in as they arrive
+3. Track angbaos in the **Angbao Tracker tab**
+4. Export an attendance report afterwards
+
+---
+
+## 8. PayNow ang-bao QR
+
+Guests can send a cash gift without any hassle: they open the public **#pay** page (linked as *"Send a gift · Ang-Bao →"* on the sign-in screen — no access code needed), type an amount, and get a PayNow QR pre-filled with that amount and **locked** so it can't be changed. Scanning it with any Singapore banking app fills in the payment ready to confirm.
+
+- Set `VITE_PAYNOW_MOBILE` to the couple's PayNow-linked mobile and `VITE_PAYNOW_NAME` to the name guests should see. Without `VITE_PAYNOW_MOBILE`, the page shows a "not set up yet" notice.
+- The QR is generated entirely in the browser (EMVCo/SGQR standard) — no backend, no payment provider, no fees. The mobile number is embedded in the QR and visible to anyone who decodes it (inherent to PayNow QR).
+- **No automatic confirmation.** Singapore banks don't expose a payment webhook for personal accounts, so the app can't detect that a gift arrived — marking ang-bao as received in the helper tracker stays manual.
+
+> **Test with a real banking app (e.g. a S$0.01 transfer) before the wedding.**
+
+You can also share `https://your-site.vercel.app/#pay` directly with guests.
+
+---
+
+## 9. Disabling angbao tracking
+
+Not every event collects ang-bao. Set `VITE_ENABLE_ANGBAO=false` (in `.env` for local dev, or under **Settings → Environment Variables** in Vercel) to hide the entire ang-bao feature, then rebuild/redeploy.
+
+When disabled, the app no longer shows:
+
+- the **🧧 Angbaos** stat pill in the header
+- the **Angbao Tracker** tab and the **Submissions** tab
+- the **🧧 Gave** search filter
+- the per-guest ang-bao toggle and amount field (on guest cards, in the table view, and in the quick-edit popup)
+- the public **#pay** PayNow gift page and its *"Send a gift · Ang-Bao →"* link
+
+The toggle is **build-time** and read once at startup — changing it requires a rebuild/redeploy, not a live flip. It is also **UI-only and non-destructive**: the `angbao_given` / `angbao_amount` columns and any values already recorded are left untouched in the database, so re-enabling the feature later brings every amount back exactly as it was.
+
+---
+
+## 10. Security
+
+No backend of its own — the database is the trust boundary.
+
+- **Admin access** — RLS limits all direct table access to authenticated helpers. The helper account is a shared Supabase Auth user; the password (access code) is verified server-side and never shipped in the bundle.
+- **Public RSVP** — the `/rsvp` page has zero direct table access. It calls three `security definer` RPC functions that expose only the minimum needed: fuzzy name verification and writing RSVP fields. The guest list is never returned to the browser.
+- **Residual risk** — helpers share one login, so anyone with the access code has full admin access. Fine for a small trusted group.
+
+See [`SECURITY.md`](../SECURITY.md) for the full threat model.
+
+---
+
+## 11. Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| RSVP form says "name not found" | Run the `0003` and `0004` migrations in the Supabase SQL Editor |
+| Not syncing across devices | Use the live Vercel URL, not `localhost`. Check env vars are set in Vercel. Devices poll every 5 seconds; the **Refresh** button forces an immediate sync. |
+| Supabase project paused | Free tier pauses after ~1 week idle — restore in the dashboard. Open the app the day before the wedding. |
+| "Not saved — check connection" | A write failed (usually flaky WiFi). The optimistic change stays on screen and reconciles on next sync. Use JSON **Backup** as a safety net. |
+| Import fails / 400 error | Check browser console. Verify env vars and that CSV columns match the format above. |
+| Angbao tab / 🧧 buttons / #pay page are missing | The ang-bao feature is turned off. Set `VITE_ENABLE_ANGBAO=true` (or remove the variable) and rebuild/redeploy. No data is lost while it's off. |
+| Confirmation email not arriving | Check Vercel function logs: `vercel logs --environment production --since 1h --source serverless --no-branch --expand`. A `500 Missing env vars` means the Vercel env vars weren't pushed — run `bash scripts/setup-vercel-env.sh`. No log at all means the Supabase Vault secrets aren't configured — run the `vault.create_secret(...)` SQL above. |
+| Gmail — "Invalid login" error | Your regular Gmail password won't work. You must use a **Gmail App Password** (16-char code from [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords)). Also requires 2-Step Verification to be on. |
+| Resend — emails only arrive to your own inbox | You're in Resend sandbox mode (no verified domain yet). Complete Option B above to send to real guests. |
+| RSVP triggers email but guest doesn't receive it | Check spam/junk folder. Gmail-to-Gmail or Gmail-to-Outlook may land there occasionally. Ask the guest to mark it not-spam. |
