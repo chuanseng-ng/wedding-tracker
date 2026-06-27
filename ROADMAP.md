@@ -6,8 +6,8 @@ This document outlines the planned development for Phase 2 and Phase 3 of the We
 
 ```
 Phase 1 ✅  Wedding Day Attendance + Angbao Tracking
-Phase 2 🔨  RSVP Collection + Table Assignment Planning
-Phase 3 💡  AI Seating Suggestions + Personalised Wedding Page
+Phase 2 ✅  RSVP Collection + Table Assignment Planning
+Phase 3 🔨  Personalised Wedding Page  (seating ✅, emails ✅, setup ✅, public page pending)
 ```
 
 ---
@@ -336,7 +336,25 @@ hand — the goal is a good base, not a finished plan.
 
 ---
 
-### 3.3 Personalised Wedding Page
+### 3.3 Wedding Setup — Core Details ✅ (implemented)
+
+The `weddings` singleton table and admin UI replace the old server env vars.
+
+**What's done (`supabase/migrations/0007_wedding_setup.sql`):**
+- `weddings` table — `bride_name`, `groom_name`, `wedding_date`, `venue_name`, `venue_address`, `ceremony_time`, `dinner_time`
+- `get_wedding_config()` / `upsert_wedding_config()` RPCs (anon-accessible)
+- Admin **Wedding Setup modal** — auto-opens on first launch as an onboarding gate; re-openable via the ⚙ gear icon in the header
+- Old env vars (`WEDDING_DATE`, `CEREMONY_TIME`, `DINNER_TIME`, `VENUE_NAME`, `VENUE_ADDRESS`, `COUPLE_NAMES`) fully removed — API functions now read from the `weddings` table
+
+**App personalisation using wedding details (all ✅):**
+- Admin header title — "♡ Wei Ming & Siew Yong" once names are set
+- Countdown pill in header — "183 days to go" / "Today! 🎊"
+- Browser tab title — personalised on admin and RSVP pages
+- RSVP page — couple names + date + venue shown; "Closer to" uses real names; confirmation message personalised
+- PayNow ang-bao page — shows couple names in header
+- CSV export — filename uses couple names
+
+**Still pending (Phase 3.3 continued):**
 
 Each couple gets a public wedding page at:
 ```
@@ -350,7 +368,6 @@ https://your-app.vercel.app/wedding/wei-ming-and-siew-yong
 - Event schedule (ceremony time, dinner time, venue address + map link)
 - RSVP button → links to the RSVP form
 - Dress code note
-- Footer with contact details
 
 **Customisation:**
 - Template selection (3–5 options to start):
@@ -363,37 +380,23 @@ https://your-app.vercel.app/wedding/wei-ming-and-siew-yong
 - Accent colour picker
 - Toggle sections on/off
 
-**Database additions for wedding page:**
+**Additional columns needed for the public page (future migration):**
 
 ```sql
-create table weddings (
-  id uuid default gen_random_uuid() primary key,
-  slug text unique,               -- e.g. 'wei-ming-and-siew-yong'
-  bride_name text,
-  groom_name text,
-  wedding_date date,
-  venue_name text,
-  venue_address text,
-  ceremony_time text,
-  dinner_time text,
-  love_story text,
-  dress_code text,
-  template text default 'minimal',
-  accent_color text default '#c9a84c',
-  hero_image_url text,
-  meal_options text,              -- comma separated e.g. 'Chicken,Fish,Vegetarian'
-  rsvp_deadline date,
-  is_published boolean default false
-);
-
-alter table weddings enable row level security;
-create policy "public" on weddings for all using (true) with check (true);
+alter table weddings add column slug text unique;         -- e.g. 'wei-ming-and-siew-yong'
+alter table weddings add column love_story text;
+alter table weddings add column dress_code text;
+alter table weddings add column template text default 'minimal';
+alter table weddings add column accent_color text default '#c9a84c';
+alter table weddings add column hero_image_url text;
+alter table weddings add column meal_options text;        -- comma-separated e.g. 'Chicken,Fish,Vegetarian'
+alter table weddings add column rsvp_deadline date;
+alter table weddings add column is_published boolean default false;
 ```
 
 **App routing additions:**
 ```
 /wedding/:slug          → Public personalised wedding page
-/admin/wedding-settings → Couple configures their wedding page (PIN protected)
 ```
 
 ---
@@ -413,18 +416,19 @@ Options:
 
 1. ✅ Add relationship group question to RSVP form
 2. ✅ Add email field to RSVP form + `guests.email` migration
-3. Build wedding page template system (start with 2 templates)
-4. Admin wedding settings page (fill in couple details, pick template)
-5. Publish wedding page at `/wedding/:slug`
-6. ✅ Deterministic seating suggestion algorithm (no AI)
-7. ✅ Seating suggestion UI in admin (generate → review → adjust)
-8. ✅ `.ics` calendar invite generator (attached to the confirmation email — no
-   standalone "Add to Calendar" button on the confirmation screen yet, since
-   there's no public wedding page to host it on)
-9. ✅ Resend serverless function for RSVP confirmation email (with `.ics` attached)
-10. ✅ Vercel Cron job for 90/30-day pending-guest reminder emails
-11. Additional templates
-12. Multi-couple auth (if needed)
+3. ✅ `weddings` table + RPCs + admin Wedding Setup modal (onboarding gate + gear icon)
+4. ✅ App personalisation — header title, countdown pill, RSVP page, PayNow page, CSV filename, browser tab title
+5. ✅ Deterministic seating suggestion algorithm (no AI)
+6. ✅ Seating suggestion UI in admin (generate → review → adjust)
+7. ✅ `.ics` calendar invite generator (attached to the confirmation email)
+8. ✅ Resend serverless function for RSVP confirmation email (with `.ics` attached)
+9. ✅ Vercel Cron job for 90/30-day pending-guest reminder emails
+10. Build public wedding page template system (start with Minimal template)
+11. Add remaining `weddings` columns (slug, love_story, template, hero_image_url…) via new migration
+12. Publish wedding page at `/wedding/:slug`
+13. Expand Wedding Setup modal — love story, dress code, hero photo upload, template picker
+14. Additional templates
+15. Multi-couple auth (if needed)
 
 ---
 
