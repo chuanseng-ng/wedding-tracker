@@ -17,6 +17,17 @@ function formatDate(dateStr) {
   }).format(new Date(dateStr));
 }
 
+function updateRsvpButton(rsvpUrl) {
+  if (!rsvpUrl) return "";
+  return `
+    <tr><td style="padding:24px 48px 0;">
+      <p style="margin:0;font-size:13px;color:#9c836a;font-family:Georgia,serif;">
+        Need to update your response?
+        <a href="${rsvpUrl}" style="color:#9c836a;">Click here to change your RSVP.</a>
+      </p>
+    </td></tr>`;
+}
+
 function emailShell({ coupleNames, heroImageUrl, children }) {
   const hero = heroImageUrl
     ? `<tr><td style="padding:0;line-height:0;">
@@ -47,7 +58,7 @@ function emailShell({ coupleNames, heroImageUrl, children }) {
 </html>`;
 }
 
-function confirmedHtml({ guestName, coupleNames, heroImageUrl, venue, address, date, ceremonyTime, dinnerTime }) {
+function confirmedHtml({ guestName, coupleNames, heroImageUrl, venue, address, date, ceremonyTime, dinnerTime, rsvpUrl }) {
   return emailShell({
     coupleNames,
     heroImageUrl,
@@ -79,11 +90,12 @@ function confirmedHtml({ guestName, coupleNames, heroImageUrl, venue, address, d
         <p style="margin:24px 0 0;font-size:13px;color:#9c836a;font-family:Georgia,serif;font-style:italic;">
           A calendar invite is attached to this email for your convenience.
         </p>
-      </td></tr>`,
+      </td></tr>
+      ${updateRsvpButton(rsvpUrl)}`,
   });
 }
 
-function declinedHtml({ guestName, coupleNames, heroImageUrl }) {
+function declinedHtml({ guestName, coupleNames, heroImageUrl, rsvpUrl }) {
   return emailShell({
     coupleNames,
     heroImageUrl,
@@ -99,12 +111,38 @@ function declinedHtml({ guestName, coupleNames, heroImageUrl }) {
           Thank you for letting us know. We'll miss having you there, but we hope
           to celebrate together another time soon.
         </p>
-      </td></tr>`,
+      </td></tr>
+      ${updateRsvpButton(rsvpUrl)}`,
   });
 }
 
+function hostNotificationHtml({ guestName, oldStatus, newStatus, mealChoice, dietaryNotes }) {
+  const statusLabel = { confirmed: "attending", declined: "not attending" };
+  const changeDesc = `${statusLabel[oldStatus] ?? oldStatus} → ${statusLabel[newStatus] ?? newStatus}`;
+  const mealLine = newStatus === "confirmed" && mealChoice
+    ? `<p style="margin:8px 0 0;font-size:14px;color:#3d2e22;font-family:Georgia,serif;">
+        Meal: ${mealChoice}${dietaryNotes ? ` · Notes: ${dietaryNotes}` : ""}
+       </p>`
+    : "";
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"></head>
+<body style="margin:0;padding:24px;background:#f9f6f1;font-family:Georgia,'Times New Roman',serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;">
+    <tr><td style="background:#fffdf9;border-radius:4px;padding:28px 32px;box-shadow:0 1px 4px rgba(0,0,0,.08);">
+      <p style="margin:0 0 4px;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#9c836a;">RSVP Update</p>
+      <h2 style="margin:0 0 16px;font-size:20px;font-weight:normal;color:#3d2e22;">${guestName} changed their RSVP</h2>
+      <p style="margin:0;font-size:15px;color:#5c4a39;font-family:Georgia,serif;">${changeDesc}</p>
+      ${mealLine}
+    </td></tr>
+  </table>
+</body>
+</html>`;
+}
+
 // Webhook target for the `guests_rsvp_status_webhook` Postgres trigger
-// (supabase/migrations/0005_email_automation.sql).
+// (supabase/migrations/0005_email_automation.sql, updated in 0006_rsvp_host_notify.sql).
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).end();
 
@@ -118,13 +156,13 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: "unauthorized" });
   }
 
-  const guestId = req.body?.guest_id;
+  const { guest_id: guestId, old_rsvp_status: oldStatus } = req.body ?? {};
   if (!guestId) return res.status(400).json({ error: "missing guest_id" });
 
   const supabase = supabaseAdmin();
   const { data: guest, error } = await supabase
     .from("guests")
-    .select("name, email, rsvp_status")
+    .select("name, email, rsvp_status, rsvp_token, meal_choice, dietary_notes")
     .eq("id", guestId)
     .single();
 
@@ -137,6 +175,9 @@ export default async function handler(req, res) {
   const coupleNames = `${wedding.bride_name} & ${wedding.groom_name}`;
   const guestName = toTitleCase(guest.name);
   const heroImageUrl = wedding.hero_image_url || "";
+
+  const siteUrl = (process.env.SITE_URL || "").replace(/\/$/, "");
+  const rsvpUrl = siteUrl && guest.rsvp_token ? `${siteUrl}/rsvp?token=${guest.rsvp_token}` : "";
 
   let fromAddress;
   try {
@@ -169,6 +210,7 @@ export default async function handler(req, res) {
         date: formatDate(wedding.wedding_date),
         ceremonyTime: wedding.ceremony_time.slice(0, 5),
         dinnerTime: wedding.dinner_time.slice(0, 5),
+        rsvpUrl,
       }),
       attachments: [
         { filename: "wedding.ics", content: Buffer.from(ics).toString("base64") },
@@ -180,7 +222,27 @@ export default async function handler(req, res) {
       fromAddress,
       to: guest.email,
       subject: `We'll miss you — ${coupleNames}'s Wedding`,
-      html: declinedHtml({ guestName, coupleNames, heroImageUrl }),
+      html: declinedHtml({ guestName, coupleNames, heroImageUrl, rsvpUrl }),
+    });
+  }
+
+  // Host notification — only when a guest changes their mind (not first-time RSVP).
+  // old_rsvp_status is 'confirmed' or 'declined' means they had previously decided.
+  const hostEmail = process.env.HOST_EMAIL;
+  if (hostEmail && (oldStatus === "confirmed" || oldStatus === "declined")) {
+    const statusLabel = { confirmed: "attending", declined: "not attending" };
+    await sendEmail({
+      from: coupleNames,
+      fromAddress,
+      to: hostEmail,
+      subject: `RSVP change: ${guestName} is now ${statusLabel[guest.rsvp_status] ?? guest.rsvp_status}`,
+      html: hostNotificationHtml({
+        guestName,
+        oldStatus,
+        newStatus: guest.rsvp_status,
+        mealChoice: guest.meal_choice,
+        dietaryNotes: guest.dietary_notes,
+      }),
     });
   }
 

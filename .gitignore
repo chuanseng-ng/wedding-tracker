@@ -31,3 +31,5 @@ dist-ssr
 .env.keys
 .env.local
 .env.*.local
+
+CLAUDE.MD
