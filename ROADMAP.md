@@ -12,6 +12,20 @@ Phase 3 ✅  Personalised Wedding Page  (seating ✅, emails ✅, setup ✅, pub
 
 ---
 
+## Pending Issues
+
+A quick-scan list of known bugs, deferred work, and housekeeping. Details live in their respective sections below.
+
+| # | Area | Summary | Section |
+|---|---|---|---|
+| 1 | RSVP | **Fuzzy name match false-positive** — `submit_rsvp_by_name` reports "ambiguous" when one guest's name is a prefix of another's (e.g. `alice` vs `alice smith`). Token-based update flow bypasses this. [Issue #18](https://github.com/shangweisong/wedding-tracker/issues/18) | §3.1 |
+| 2 | Email | **Supabase Vault webhook setup is manual** — `vault.create_secret(...)` cannot be scripted; must be done once in the SQL Editor. [Issue #17](https://github.com/shangweisong/wedding-tracker/issues/17) | §Housekeeping |
+| 3 | Wedding Page | **Single template only** — only the Minimal dark-gold theme exists. Additional templates (Floral, Modern, Traditional, Garden) and accent colour picker are pending. | §3.3 |
+| 4 | Docs | **README → User Guide split** — README is getting long; detailed setup steps (email, Supabase, env vars) should move to `docs/USER_GUIDE.md`. | §Housekeeping |
+| 5 | Migrations | **Migration consolidation** — `0006_rsvp_host_notify.sql` patches the trigger from `0005`. Both should be consolidated for clean new deployments, and the README setup table updated. | §Housekeeping |
+
+---
+
 ## Phase 2 — RSVP Collection + Table Assignment Planning
 
 ### Goal
@@ -409,6 +423,54 @@ alter table weddings add column getting_there text default ''; -- 0010
 
 ---
 
+### 3.5 RSVP Update Links & Host Change-of-Mind Notifications ✅ (implemented)
+
+**Why:** Guests needed a way to update their RSVP after initial submission, and the couple needed to know when someone changed their mind — without inbox noise from every first-time submission.
+
+---
+
+**Personalised RSVP update links in emails ✅**
+
+Every guest-facing email (reminder + confirmation + declined) now includes a token-based link so the guest can return and update their response at any time:
+
+```
+https://your-app.vercel.app/rsvp?token=<rsvp_token>
+```
+
+The `rsvp_token` UUID already existed in the DB (`guests.rsvp_token`). The gap was that emails never included it. Both `send-rsvp-email.js` (confirmation/declined emails) and `send-reminders.js` (90/30-day nudges) now fetch `rsvp_token` alongside other guest data and embed a branded "Update RSVP" button.
+
+**New env var required:**
+```
+SITE_URL=https://your-app.vercel.app
+```
+Used server-side to build the RSVP link. No `VITE_` prefix — never exposed to the browser.
+
+---
+
+**RSVP form pre-fill from token ✅**
+
+When a guest arrives via `?token=<uuid>`, `RsvpPage.jsx` now calls `get_guest_by_rsvp_token` to pre-load all their existing answers (name, attendance, meal, dietary, relationship, party). The name field is locked read-only. On submit, uses `submit_rsvp` (token-based RPC) instead of the fuzzy name-match — exact lookup, no ambiguity risk. Falls back to name-search flow if no token present.
+
+---
+
+**Host change-of-mind notifications ✅**
+
+When a guest changes their RSVP status in either direction (`confirmed → declined` or `declined → confirmed`), a notification email is sent to the couple. First-time submissions (`pending → confirmed/declined`) do **not** trigger a host notification — avoiding inbox noise during the initial RSVP collection period.
+
+**How it works:**
+- `0006_rsvp_host_notify.sql` — updates the `notify_rsvp_status_change()` Postgres trigger to include `old_rsvp_status` in the webhook payload (alongside the existing `guest_id`)
+- `send-rsvp-email.js` — if `old_rsvp_status` is `confirmed` or `declined`, sends a second email to `HOST_EMAIL` with guest name, old → new status, and meal/dietary notes if now confirmed
+- Subject line: `RSVP change: [Name] is now attending/not attending`
+
+**New env var required:**
+```
+HOST_EMAIL=your@email.com
+```
+
+**New migration:** `supabase/migrations/0006_rsvp_host_notify.sql`
+
+---
+
 ### 3.4 Multi-Couple Support (Future consideration)
 
 Currently the app is single-couple. Phase 3 may need to support multiple couples if this becomes a hosted product.
@@ -435,8 +497,10 @@ Options:
 11. ✅ Add remaining `weddings` columns (slug, love_story, dress_code, hero_image_url, fun_qa, rsvp_deadline, is_published) via `0008_wedding_page.sql`
 12. ✅ Publish wedding page at `/wedding/:slug`
 13. ✅ Expand Wedding Setup modal — love story, dress code, hero photo upload, fun Q&A, publish toggle
-14. Additional templates (Floral, Modern, Traditional, Garden)
-15. Multi-couple auth (if needed)
+14. ✅ Personalised RSVP update links in all guest emails (`SITE_URL` env var + token button in confirmation, declined, and reminder emails)
+15. ✅ Host change-of-mind notifications (`HOST_EMAIL` env var + `0006_rsvp_host_notify.sql` trigger update + `send-rsvp-email.js` host email)
+16. Additional templates (Floral, Modern, Traditional, Garden)
+17. Multi-couple auth (if needed)
 
 ---
 
@@ -494,6 +558,7 @@ Options:
 - ✅ Vercel env var setup automated via `scripts/setup-vercel-env.sh` — reads `.env`, detects provider, pushes all server-only vars to Vercel in one command ([PR #26](https://github.com/shangweisong/wedding-tracker/pull/26), closes [issue #17](https://github.com/shangweisong/wedding-tracker/issues/17) setup-script part).
 - ✅ Pluggable email provider — `EMAIL_PROVIDER=gmail` (default, no domain needed) or `EMAIL_PROVIDER=resend` (custom domain). Brevo removed due to incompatibility with Vercel's dynamic IPs ([PR #26](https://github.com/shangweisong/wedding-tracker/pull/26)).
 - The Supabase Vault `vault.create_secret(...)` step for the RSVP email webhook remains a manual one-time SQL step — documented in README step 6 and tracked in [issue #17](https://github.com/shangweisong/wedding-tracker/issues/17).
+- ✅ Two new server-only env vars added for RSVP update links and host notifications: `SITE_URL` (base URL for token links) and `HOST_EMAIL` (destination for change-of-mind alerts). Neither uses a `VITE_` prefix.
 - ✅ `supabase/migrations/` consolidated from 10 files → 5 files ([PR #25](https://github.com/shangweisong/wedding-tracker/pull/25), closes [issue #19](https://github.com/shangweisong/wedding-tracker/issues/19)). New structure:
   - `0001_init.sql` — guests table + trigger (unchanged)
   - `0002_draw_and_submissions.sql` — draw numbers + submissions (unchanged)
@@ -501,6 +566,8 @@ Options:
   - `0004_weddings.sql` — weddings table (all columns) + page RPCs + photo bucket
   - `0005_email_automation.sql` — **optional**, apply after Resend + Vercel are configured
   - `reconcile_remote_db.sql` — run once in Supabase SQL Editor on existing projects to sync migration tracking
+- **Migration consolidation needed** — `0006_rsvp_host_notify.sql` is a small patch that updates the trigger from `0005`. For a clean new-deployment experience, `0005` and `0006` should be merged into a single file. Also: the README setup table currently only lists `0001`–`0005` and needs updating. Do this as a dedicated housekeeping pass so existing deployments aren't disrupted.
+- **README → User Guide split** — README has grown long with detailed setup instructions (email provider setup, Supabase Vault wiring, CSV format, PayNow, angbao). Extract these into `docs/USER_GUIDE.md` with step-by-step guidance. README becomes a 1-page overview + quick-start that links out to the guide for depth.
 
 ---
 

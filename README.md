@@ -36,7 +36,9 @@ Share one link with all your guests — no individual links needed:
 https://your-app.vercel.app/rsvp
 ```
 
-Guests open it, fill in the form (name, attendance, meal choice, dietary needs, message), and submit. Their name is fuzzy-matched against your guest list on the server — typos and partial names still resolve correctly. If verification passes, their RSVP is saved. The guest list is never sent to the browser.
+Guests open it, fill in the form (name, attendance, meal choice, dietary needs, message), and submit. Their name is fuzzy-matched against your guest list on the server — typos and partial names still resolve correctly. If verification passes, their RSVP is saved and they receive a confirmation email with a personalised link to update their response later. The guest list is never sent to the browser.
+
+**Updating an RSVP:** the confirmation email contains a unique `?token=` link. Clicking it reopens the form pre-filled with their previous answers. Submitting again updates their record. If a guest changes from confirmed to declined (or vice versa), you receive a notification email at `HOST_EMAIL`.
 
 **Edge cases:**
 - Typo in name → still matches if close enough (pg_trgm similarity)
@@ -75,6 +77,7 @@ Open the **SQL Editor** in your Supabase dashboard and run the migrations **in o
 | [`0003_rsvp_seating.sql`](supabase/migrations/0003_rsvp_seating.sql) | `tables` table; all RSVP columns on guests (`rsvp_status`, `meal_choice`, `email`, etc.); fuzzy name-match RPC (`submit_rsvp_by_name`); relationship taxonomy columns |
 | [`0004_weddings.sql`](supabase/migrations/0004_weddings.sql) | Singleton `weddings` table; wedding page columns (slug, love story, hero photo, etc.); `get_wedding_config` / `upsert_wedding_config` / `get_public_wedding` RPCs; photo storage bucket |
 | [`0005_email_automation.sql`](supabase/migrations/0005_email_automation.sql) | `pg_net` extension; RSVP status-change webhook trigger; `last_reminder_sent_at` column — **apply only after completing the email setup in step 6** |
+| [`0006_rsvp_host_notify.sql`](supabase/migrations/0006_rsvp_host_notify.sql) | Updates the webhook trigger to include `old_rsvp_status` in the payload — required for host change-of-mind notifications. Apply after `0005`. |
 
 All migrations are idempotent (`CREATE OR REPLACE`, `IF NOT EXISTS`) — safe to re-run.
 

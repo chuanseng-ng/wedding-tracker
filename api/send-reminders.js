@@ -35,7 +35,7 @@ export default async function handler(req, res) {
 
   const { data: guests, error } = await supabase
     .from("guests")
-    .select("id, name, email, last_reminder_sent_at")
+    .select("id, name, email, rsvp_token, last_reminder_sent_at")
     .eq("rsvp_status", "pending")
     .neq("email", "");
 
@@ -49,6 +49,7 @@ export default async function handler(req, res) {
   }
 
   const coupleNames = `${wedding.bride_name} & ${wedding.groom_name}`;
+  const siteUrl = (process.env.SITE_URL || "").replace(/\/$/, "");
   let sent = 0;
 
   for (const guest of guests) {
@@ -56,12 +57,39 @@ export default async function handler(req, res) {
     const isSecondReminder = days <= 30 && !isFirstReminder;
     if (!isFirstReminder && !isSecondReminder) continue;
 
+    const rsvpUrl = siteUrl && guest.rsvp_token ? `${siteUrl}/rsvp?token=${guest.rsvp_token}` : "";
+    const rsvpButton = rsvpUrl
+      ? `<p style="margin:24px 0 0;">
+           <a href="${rsvpUrl}"
+              style="display:inline-block;padding:12px 28px;background:#c9a97a;color:#fff;
+                     font-family:Georgia,serif;font-size:15px;text-decoration:none;border-radius:2px;">
+             RSVP Now
+           </a>
+         </p>`
+      : "";
+
     await sendEmail({
       from: coupleNames,
       fromAddress,
       to: guest.email,
       subject: `Reminder: RSVP for ${coupleNames}'s Wedding`,
-      html: `<p>Hi ${guest.name},</p><p>Just a friendly reminder to RSVP for our wedding on ${weddingDate} — we'd love to know if you can make it!</p>`,
+      html: `<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"></head>
+<body style="margin:0;padding:24px;background:#f9f6f1;font-family:Georgia,'Times New Roman',serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;">
+    <tr><td style="background:#fffdf9;border-radius:4px;padding:32px 36px;box-shadow:0 1px 4px rgba(0,0,0,.08);">
+      <p style="margin:0 0 6px;font-size:11px;letter-spacing:3px;text-transform:uppercase;color:#9c836a;font-family:Georgia,serif;">${coupleNames}</p>
+      <h1 style="margin:0 0 16px;font-size:22px;font-weight:normal;color:#3d2e22;font-family:Georgia,serif;">
+        ${isFirstReminder ? "We'd love to know if you can make it." : "Last chance to RSVP."}
+      </h1>
+      <p style="margin:0;font-size:15px;line-height:1.75;color:#5c4a39;font-family:Georgia,serif;">
+        Hi ${guest.name}, just a friendly reminder — our wedding is coming up on
+        <strong>${weddingDate}</strong> and we'd love to have your RSVP.
+      </p>
+      ${rsvpButton}
+    </td></tr>
+  </table>
+</body></html>`,
     });
 
     await supabase
