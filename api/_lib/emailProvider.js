@@ -1,5 +1,5 @@
 import { Resend } from "resend";
-import * as Brevo from "@getbrevo/brevo";
+import { BrevoClient } from "@getbrevo/brevo";
 
 // Unified email sender. Set EMAIL_PROVIDER=resend (default) or EMAIL_PROVIDER=brevo.
 //
@@ -73,18 +73,15 @@ async function sendViaResend({ from, fromAddress, to, subject, html, attachments
 async function sendViaBrevo({ from, fromAddress, to, subject, html, attachments }) {
   if (!process.env.BREVO_API_KEY) throw new Error("Missing BREVO_API_KEY");
 
-  const apiInstance = new Brevo.TransactionalEmailsApi();
-  apiInstance.authentications["apiKey"].apiKey = process.env.BREVO_API_KEY;
+  const client = new BrevoClient({ apiKey: process.env.BREVO_API_KEY });
 
-  const email = new Brevo.SendSmtpEmail();
-  email.sender = { name: from, email: fromAddress };
-  email.to = [{ email: to }];
-  email.subject = subject;
-  email.htmlContent = html;
-
-  if (attachments.length > 0) {
-    email.attachment = attachments.map(({ filename, content }) => ({ name: filename, content }));
-  }
-
-  await apiInstance.sendTransacEmail(email);
+  await client.transactionalEmails.sendTransacEmail({
+    sender: { name: from, email: fromAddress },
+    to: [{ email: to }],
+    subject,
+    htmlContent: html,
+    ...(attachments.length > 0 && {
+      attachment: attachments.map(({ filename, content }) => ({ name: filename, content })),
+    }),
+  });
 }
