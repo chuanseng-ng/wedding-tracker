@@ -155,9 +155,6 @@ REQUIRED_VARS=(
 if [[ "$PROVIDER" == "gmail" ]]; then
   REQUIRED_VARS+=("GMAIL_FROM" "GMAIL_APP_PASSWORD")
   OPTIONAL_VARS=()
-elif [[ "$PROVIDER" == "brevo" ]]; then
-  REQUIRED_VARS+=("BREVO_API_KEY" "BREVO_FROM_EMAIL")
-  OPTIONAL_VARS=()
 else
   REQUIRED_VARS+=("RESEND_API_KEY")
   # One of these is required; warn if both missing
