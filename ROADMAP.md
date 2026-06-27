@@ -12,6 +12,20 @@ Phase 3 ✅  Personalised Wedding Page  (seating ✅, emails ✅, setup ✅, pub
 
 ---
 
+## Pending Issues
+
+A quick-scan list of known bugs, deferred work, and housekeeping. Details live in their respective sections below.
+
+| # | Area | Summary | Section |
+|---|---|---|---|
+| 1 | RSVP | **Fuzzy name match false-positive** — `submit_rsvp_by_name` reports "ambiguous" when one guest's name is a prefix of another's (e.g. `alice` vs `alice smith`). Token-based update flow bypasses this. [Issue #18](https://github.com/shangweisong/wedding-tracker/issues/18) | §3.1 |
+| 2 | Email | **Supabase Vault webhook setup is manual** — `vault.create_secret(...)` cannot be scripted; must be done once in the SQL Editor. [Issue #17](https://github.com/shangweisong/wedding-tracker/issues/17) | §Housekeeping |
+| 3 | Wedding Page | **Single template only** — only the Minimal dark-gold theme exists. Additional templates (Floral, Modern, Traditional, Garden) and accent colour picker are pending. | §3.3 |
+| 4 | Docs | **README → User Guide split** — README is getting long; detailed setup steps (email, Supabase, env vars) should move to `docs/USER_GUIDE.md`. | §Housekeeping |
+| 5 | Migrations | **Migration consolidation** — `0006_rsvp_host_notify.sql` patches the trigger from `0005`. Both should be consolidated for clean new deployments, and the README setup table updated. | §Housekeeping |
+
+---
+
 ## Phase 2 — RSVP Collection + Table Assignment Planning
 
 ### Goal
@@ -433,14 +447,20 @@ Used server-side to build the RSVP link. No `VITE_` prefix — never exposed to 
 
 ---
 
+**RSVP form pre-fill from token ✅**
+
+When a guest arrives via `?token=<uuid>`, `RsvpPage.jsx` now calls `get_guest_by_rsvp_token` to pre-load all their existing answers (name, attendance, meal, dietary, relationship, party). The name field is locked read-only. On submit, uses `submit_rsvp` (token-based RPC) instead of the fuzzy name-match — exact lookup, no ambiguity risk. Falls back to name-search flow if no token present.
+
+---
+
 **Host change-of-mind notifications ✅**
 
-When a guest changes their RSVP status in either direction (`confirmed → declined` or `declined → confirmed`), a notification email is sent to the couple. First-time submissions (`null → confirmed/declined`) do **not** trigger a host notification — avoiding inbox noise during the initial RSVP collection period.
+When a guest changes their RSVP status in either direction (`confirmed → declined` or `declined → confirmed`), a notification email is sent to the couple. First-time submissions (`pending → confirmed/declined`) do **not** trigger a host notification — avoiding inbox noise during the initial RSVP collection period.
 
 **How it works:**
 - `0006_rsvp_host_notify.sql` — updates the `notify_rsvp_status_change()` Postgres trigger to include `old_rsvp_status` in the webhook payload (alongside the existing `guest_id`)
-- `send-rsvp-email.js` — if `old_rsvp_status` is not null, it sends a second email to `HOST_EMAIL` summarising the change (guest name, old status → new status, meal choice, dietary notes)
-- Subject lines distinguish direction: `⚠️ Cancellation: [Name]` vs `Update: [Name] changed to attending`
+- `send-rsvp-email.js` — if `old_rsvp_status` is `confirmed` or `declined`, sends a second email to `HOST_EMAIL` with guest name, old → new status, and meal/dietary notes if now confirmed
+- Subject line: `RSVP change: [Name] is now attending/not attending`
 
 **New env var required:**
 ```
@@ -546,6 +566,8 @@ Options:
   - `0004_weddings.sql` — weddings table (all columns) + page RPCs + photo bucket
   - `0005_email_automation.sql` — **optional**, apply after Resend + Vercel are configured
   - `reconcile_remote_db.sql` — run once in Supabase SQL Editor on existing projects to sync migration tracking
+- **Migration consolidation needed** — `0006_rsvp_host_notify.sql` is a small patch that updates the trigger from `0005`. For a clean new-deployment experience, `0005` and `0006` should be merged into a single file. Also: the README setup table currently only lists `0001`–`0005` and needs updating. Do this as a dedicated housekeeping pass so existing deployments aren't disrupted.
+- **README → User Guide split** — README has grown long with detailed setup instructions (email provider setup, Supabase Vault wiring, CSV format, PayNow, angbao). Extract these into `docs/USER_GUIDE.md` with step-by-step guidance. README becomes a 1-page overview + quick-start that links out to the guide for depth.
 
 ---
 
