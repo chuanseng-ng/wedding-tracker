@@ -152,7 +152,10 @@ REQUIRED_VARS=(
 )
 
 # Provider-specific vars
-if [[ "$PROVIDER" == "brevo" ]]; then
+if [[ "$PROVIDER" == "gmail" ]]; then
+  REQUIRED_VARS+=("GMAIL_FROM" "GMAIL_APP_PASSWORD")
+  OPTIONAL_VARS=()
+elif [[ "$PROVIDER" == "brevo" ]]; then
   REQUIRED_VARS+=("BREVO_API_KEY" "BREVO_FROM_EMAIL")
   OPTIONAL_VARS=()
 else
@@ -169,7 +172,7 @@ for var in "${REQUIRED_VARS[@]}"; do
 done
 
 # ── Handle Resend from-address (either RESEND_FROM_EMAIL or RESEND_SENDING_DOMAIN) ──
-if [[ "$PROVIDER" != "brevo" ]]; then
+if [[ "$PROVIDER" != "brevo" && "$PROVIDER" != "gmail" ]]; then
   from_email=$(env_get "RESEND_FROM_EMAIL")
   sending_domain=$(env_get "RESEND_SENDING_DOMAIN")
 

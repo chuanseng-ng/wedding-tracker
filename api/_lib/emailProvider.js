@@ -1,17 +1,18 @@
 import { Resend } from "resend";
 import { BrevoClient } from "@getbrevo/brevo";
+import nodemailer from "nodemailer";
 
-// Unified email sender. Set EMAIL_PROVIDER=resend (default) or EMAIL_PROVIDER=brevo.
-//
-// Resend setup:  RESEND_API_KEY + (RESEND_FROM_EMAIL or RESEND_SENDING_DOMAIN)
-// Brevo setup:   BREVO_API_KEY  + BREVO_FROM_EMAIL
+// Unified email sender. Set EMAIL_PROVIDER to one of:
+//   "resend"  — RESEND_API_KEY + (RESEND_FROM_EMAIL or RESEND_SENDING_DOMAIN)
+//   "brevo"   — BREVO_API_KEY + BREVO_FROM_EMAIL
+//   "gmail"   — GMAIL_FROM + GMAIL_APP_PASSWORD  ← no domain needed
 //
 // Switching providers = change EMAIL_PROVIDER in Vercel env vars. No code change needed.
 
 /**
  * @param {object} opts
  * @param {string} opts.from        Display name, e.g. "Wei Ming & Siew Yong"
- * @param {string} opts.fromAddress e.g. "rsvp@yourdomain.com"
+ * @param {string} opts.fromAddress e.g. "rsvp@yourdomain.com" or Gmail address
  * @param {string} opts.to          Recipient email
  * @param {string} opts.subject
  * @param {string} opts.html
@@ -20,6 +21,9 @@ import { BrevoClient } from "@getbrevo/brevo";
 export async function sendEmail({ from, fromAddress, to, subject, html, attachments = [] }) {
   const provider = (process.env.EMAIL_PROVIDER || "resend").toLowerCase();
 
+  if (provider === "gmail") {
+    return sendViaGmail({ from, fromAddress, to, subject, html, attachments });
+  }
   if (provider === "brevo") {
     return sendViaBrevo({ from, fromAddress, to, subject, html, attachments });
   }
@@ -28,6 +32,12 @@ export async function sendEmail({ from, fromAddress, to, subject, html, attachme
 
 export function getFromAddress() {
   const provider = (process.env.EMAIL_PROVIDER || "resend").toLowerCase();
+
+  if (provider === "gmail") {
+    const addr = process.env.GMAIL_FROM;
+    if (!addr) throw new Error("Missing GMAIL_FROM");
+    return addr;
+  }
   if (provider === "brevo") {
     const addr = process.env.BREVO_FROM_EMAIL;
     if (!addr) throw new Error("Missing BREVO_FROM_EMAIL");
@@ -46,7 +56,10 @@ export function missingEmailEnvVars() {
 
   if (!process.env.SUPABASE_SERVICE_ROLE_KEY) missing.push("SUPABASE_SERVICE_ROLE_KEY");
 
-  if (provider === "brevo") {
+  if (provider === "gmail") {
+    if (!process.env.GMAIL_FROM) missing.push("GMAIL_FROM");
+    if (!process.env.GMAIL_APP_PASSWORD) missing.push("GMAIL_APP_PASSWORD");
+  } else if (provider === "brevo") {
     if (!process.env.BREVO_API_KEY) missing.push("BREVO_API_KEY");
     if (!process.env.BREVO_FROM_EMAIL) missing.push("BREVO_FROM_EMAIL");
   } else {
@@ -56,6 +69,32 @@ export function missingEmailEnvVars() {
   }
 
   return missing;
+}
+
+async function sendViaGmail({ from, fromAddress, to, subject, html, attachments }) {
+  if (!process.env.GMAIL_APP_PASSWORD) throw new Error("Missing GMAIL_APP_PASSWORD");
+
+  const transporter = nodemailer.createTransport({
+    service: "gmail",
+    auth: {
+      user: fromAddress,
+      pass: process.env.GMAIL_APP_PASSWORD,
+    },
+  });
+
+  await transporter.sendMail({
+    from: `${from} <${fromAddress}>`,
+    to,
+    subject,
+    html,
+    ...(attachments.length > 0 && {
+      attachments: attachments.map(({ filename, content }) => ({
+        filename,
+        content,
+        encoding: "base64",
+      })),
+    }),
+  });
 }
 
 async function sendViaResend({ from, fromAddress, to, subject, html, attachments }) {
