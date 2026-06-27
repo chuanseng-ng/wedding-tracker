@@ -1,12 +1,13 @@
-import { Resend } from "resend";
 import { supabaseAdmin } from "./_lib/supabaseAdmin.js";
 import { buildIcs } from "./_lib/ics.js";
+import { sendEmail, getFromAddress } from "./_lib/emailProvider.js";
 
 // Webhook target for the `guests_rsvp_status_webhook` Postgres trigger
-// (supabase/migrations/0006_email_automation.sql). Verifies the shared
+// (supabase/migrations/0005_email_automation.sql). Verifies the shared
 // secret so this can't be triggered by an arbitrary caller, looks up the
 // guest with the service-role client (bypasses RLS), and sends a
-// confirmation or "sorry to miss you" email via Resend.
+// confirmation or "sorry to miss you" email via the configured provider
+// (EMAIL_PROVIDER=resend|brevo).
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).end();
 
@@ -31,11 +32,13 @@ export default async function handler(req, res) {
   const { data: wedding } = await supabase.from("weddings").select("*").limit(1).single();
   if (!wedding) return res.status(200).json({ skipped: "wedding not configured" });
 
-  const resend = new Resend(process.env.RESEND_API_KEY);
   const coupleNames = `${wedding.bride_name} & ${wedding.groom_name}`;
-  // RESEND_FROM_EMAIL lets you override with Resend's sandbox sender
-  // (onboarding@resend.dev) before a domain is verified — see .env.example.
-  const fromAddress = process.env.RESEND_FROM_EMAIL || `rsvp@${process.env.RESEND_SENDING_DOMAIN}`;
+  let fromAddress;
+  try {
+    fromAddress = getFromAddress();
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
+  }
 
   if (guest.rsvp_status === "confirmed") {
     const ics = buildIcs({
@@ -47,8 +50,9 @@ export default async function handler(req, res) {
       venueAddress: wedding.venue_address,
     });
 
-    await resend.emails.send({
-      from: `${coupleNames} <${fromAddress}>`,
+    await sendEmail({
+      from: coupleNames,
+      fromAddress,
       to: guest.email,
       subject: `You're confirmed! ${coupleNames}'s Wedding`,
       html: `<p>Hi ${guest.name},</p><p>Thanks for confirming — we can't wait to celebrate with you!</p><p>${wedding.venue_name}, ${wedding.venue_address}<br>${wedding.wedding_date}</p>`,
@@ -57,8 +61,9 @@ export default async function handler(req, res) {
       ],
     });
   } else if (guest.rsvp_status === "declined") {
-    await resend.emails.send({
-      from: `${coupleNames} <${fromAddress}>`,
+    await sendEmail({
+      from: coupleNames,
+      fromAddress,
       to: guest.email,
       subject: `We'll miss you — ${coupleNames}'s Wedding`,
       html: `<p>Hi ${guest.name},</p><p>Thanks for letting us know. We'll miss you, but hope to celebrate together another time!</p>`,
