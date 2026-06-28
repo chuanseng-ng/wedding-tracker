@@ -33,7 +33,9 @@ Open the **SQL Editor** in your Supabase dashboard and run the migrations **in o
 | [`0002_draw_and_submissions.sql`](../supabase/migrations/0002_draw_and_submissions.sql) | Lucky-draw number, guest receipt-upload queue (`submissions` table), private `receipts` storage bucket |
 | [`0003_rsvp_seating.sql`](../supabase/migrations/0003_rsvp_seating.sql) | `tables` table; all RSVP columns on guests (`rsvp_status`, `meal_choice`, `email`, etc.); fuzzy name-match RPC (`submit_rsvp_by_name`); relationship taxonomy columns |
 | [`0004_weddings.sql`](../supabase/migrations/0004_weddings.sql) | Singleton `weddings` table; wedding page columns (slug, love story, hero photo, etc.); `get_wedding_config` / `upsert_wedding_config` / `get_public_wedding` RPCs; photo storage bucket |
-| [`0005_email_automation.sql`](../supabase/migrations/0005_email_automation.sql) | `pg_net` extension; RSVP status-change webhook trigger; `last_reminder_sent_at` column — **apply only after completing the email setup in step 5** |
+| [`0005_email_automation.sql`](../supabase/migrations/0005_email_automation.sql) | `pg_net` extension; RSVP status-change webhook trigger (includes `old_rsvp_status` for host change-of-mind notifications); `last_reminder_sent_at` column — **apply only after completing the email setup in step 5** |
+| [`0006_rsvp_host_notify.sql`](../supabase/migrations/0006_rsvp_host_notify.sql) | No-op — content absorbed into `0005`. Safe to run on existing deployments. |
+| [`0007_second_reminder.sql`](../supabase/migrations/0007_second_reminder.sql) | Adds `second_reminder_sent_at` column so 90-day and 30-day reminders are tracked independently |
 
 All migrations are idempotent (`CREATE OR REPLACE`, `IF NOT EXISTS`) — safe to re-run.
 
@@ -218,13 +220,21 @@ vercel --prod
 
 ### Wire up the Supabase webhook
 
-This is a one-time step in the **Supabase SQL Editor**. It tells Supabase where to call when a guest RSVPs.
+This is a one-time step that tells Supabase where to call when a guest RSVPs.
 
 **Step 1 — Apply the email automation migration** (if you haven't already):
 
 Run [`0005_email_automation.sql`](../supabase/migrations/0005_email_automation.sql) in the SQL Editor.
 
 **Step 2 — Register the webhook URL and secret in Supabase Vault:**
+
+The included helper script reads your `.env` and either runs the SQL automatically (if the Supabase CLI is installed) or prints a pre-filled snippet you can paste into the SQL Editor:
+
+```bash
+bash scripts/setup-vault-secrets.sh
+```
+
+If you prefer to run it manually, open the **Supabase SQL Editor** and paste:
 
 ```sql
 select vault.create_secret(
