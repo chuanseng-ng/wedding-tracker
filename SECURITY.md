@@ -30,6 +30,11 @@ This project is configured so that:
    **disable public sign-ups** so strangers can't self-register an account.
 3. Set `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and `VITE_HELPER_EMAIL`
    in your deployment environment. Never commit `.env`.
+   **Never set `VITE_HELPER_PASSWORD`.** Any `VITE_` variable is embedded in
+   the JavaScript bundle and readable by anyone who inspects the page — setting
+   the access code this way exposes it publicly. The access code is entered at
+   the lock screen at runtime and verified server-side; it must never appear in
+   any env file.
 4. For email automation (Phase 3, optional): run
    `supabase/migrations/0006_email_automation.sql`, then create the two
    Supabase Vault secrets it documents (`rsvp_email_webhook_url`,

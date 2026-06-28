@@ -5,6 +5,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [2026-06-28] — security/restore-admin-pin
+
+### Security
+
+- **Admin PIN re-enabled** — `unlocked` state was initialised to `true`, bypassing the lock screen entirely in production. Restored to `isDemoMode` so the PIN screen shows in production and demo mode stays unlocked.
+- **`VITE_HELPER_PASSWORD` removed** — this variable caused the access code to be embedded in the JavaScript bundle in plaintext, readable by anyone who inspected the page source. The auto-sign-in block that read it has been removed. The correct flow is: helper types the access code at the lock screen → Supabase Auth verifies it server-side → session is persisted in the browser.
+- **Docs updated** — `docs/USER_GUIDE.md` and `SECURITY.md` now document why `VITE_HELPER_PASSWORD` must never be set and what to do if it was (rotate the Supabase helper password immediately).
+
+---
+
 ## [2026-06-28]
 
 ### Fixed

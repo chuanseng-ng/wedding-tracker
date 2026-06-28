@@ -23,6 +23,10 @@ A quick-scan list of known bugs, deferred work, and housekeeping. Details live i
 | 3 | Wedding Page | **Single template only** — only the Minimal dark-gold theme exists. Additional templates (Floral, Modern, Traditional, Garden) and accent colour picker are pending. | §3.3 |
 | 4 | Docs | ~~**README → User Guide split**~~ ✅ — `docs/USER_GUIDE.md` created; README is now a 1-page overview + quick-start. | §Housekeeping |
 | 5 | Migrations | **Migration consolidation** — `0006_rsvp_host_notify.sql` patches the trigger from `0005`. Both should be consolidated for clean new deployments, and the README setup table updated. | §Housekeeping |
+| 6 | Security | **Admin PIN disabled** — `AdminApp.jsx` `unlocked` initialises to `true`; the PIN screen is never shown in production. Any visitor to `/` sees the full admin dashboard. | §Security |
+| 7 | Security | **`CRON_SECRET` not enforced** — `send-reminders.js` only validates the secret when the env var is set; if omitted, anyone can POST to `/api/send-reminders` and spam reminder emails to all guests. | §Security |
+| 8 | Email | **RSVP email buttons undersized** — reminder email CTA uses modest padding; confirmation email "update your RSVP" is a plain text link, not a button. | §Security |
+| 9 | Security | **PayNow `/#pay` page is fully public** — no auth check; anyone with the URL can access it. Intentional for guest use but worth documenting explicitly. | §Security |
 
 ---
 
@@ -550,6 +554,39 @@ Options:
 | Email | Resend | Free 3k/month |
 | Seating draft | In-app grouping algorithm | Free |
 | Deployment | Vercel | Free tier |
+
+---
+
+## Security (issues #6–#9)
+
+### #6 — Re-enable Admin PIN
+
+`AdminApp.jsx:805` sets `unlocked = useState(true)`, bypassing the PIN screen entirely. Changing it to `useState(isDemoMode)` restores the original flow: demo mode stays unlocked, production requires Supabase Auth sign-in. The auto-sign-in path (`VITE_HELPER_PASSWORD`) still works — it will just show the PIN screen briefly while the auth request resolves.
+
+**Fix:** one-line change in `AdminApp.jsx`. Low risk.
+
+---
+
+### #7 — Make `CRON_SECRET` mandatory
+
+`send-reminders.js` only checks the `Authorization` header when `CRON_SECRET` is set (`if (cronSecret && ...)`). If the env var is missing the endpoint is open to anyone, enabling guest-email spam. The guard should be inverted: reject requests unconditionally unless the secret matches, and return 500 if the env var is missing rather than silently skipping the check.
+
+**Fix:** small guard change in `send-reminders.js`. Low risk.
+
+---
+
+### #8 — Bigger RSVP email buttons
+
+- Reminder email (`send-reminders.js`): increase CTA button padding from `12px 28px` → `16px 36px`, bump font size.
+- Confirmation email (`send-rsvp-email.js`): promote the "update your RSVP" text link to a proper `<a>` styled as a secondary button.
+
+**Fix:** HTML/CSS string edits in two serverless files. Low risk.
+
+---
+
+### #9 — PayNow page visibility (document, not fix)
+
+`/#pay` (hash-routed) is intentionally public — guests need it to send ang-bao without logging in. No code change needed. Worth adding a comment in `AdminApp.jsx` near the `route === "pay"` branch to make the intent explicit for future maintainers.
 
 ---
 
