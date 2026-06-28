@@ -64,9 +64,6 @@ VITE_SUPABASE_URL=https://xxxxxxxxxxxx.supabase.co
 VITE_SUPABASE_ANON_KEY=eyJ...your anon key...
 VITE_HELPER_EMAIL=helpers@wedding.local   # must match the helper account; not secret
 
-# Optional — auto-signs in so the DB works without the PIN screen
-VITE_HELPER_PASSWORD=your-access-code
-
 # Optional — enables the PayNow ang-bao page (Singapore). Not secret.
 VITE_PAYNOW_MOBILE=+6591234567            # the couple's PayNow-linked mobile
 VITE_PAYNOW_NAME=The Happy Couple         # name shown to guests
@@ -74,6 +71,8 @@ VITE_PAYNOW_NAME=The Happy Couple         # name shown to guests
 # Optional — set to "false" to hide all ang-bao tracking. Default on.
 VITE_ENABLE_ANGBAO=true
 ```
+
+> **Never set `VITE_HELPER_PASSWORD`.** Any variable with a `VITE_` prefix is embedded in the JavaScript bundle and visible to anyone who inspects the page source. Setting the access code this way exposes it publicly, defeating the purpose of the lock screen entirely. The access code is entered at the lock screen at runtime and verified server-side by Supabase — it never belongs in any env file.
 
 ### Server-only variables (no `VITE_` — never expose to client)
 
@@ -328,8 +327,9 @@ The toggle is **build-time** and read once at startup — changing it requires a
 
 No backend of its own — the database is the trust boundary.
 
-- **Admin access** — RLS limits all direct table access to authenticated helpers. The helper account is a shared Supabase Auth user; the password (access code) is verified server-side and never shipped in the bundle.
-- **Public RSVP** — the `/rsvp` page has zero direct table access. It calls three `security definer` RPC functions that expose only the minimum needed: fuzzy name verification and writing RSVP fields. The guest list is never returned to the browser.
+- **Admin access** — RLS limits all direct table access to authenticated helpers. The helper account is a shared Supabase Auth user; the access code is entered at the lock screen at runtime, verified server-side by Supabase Auth, and never stored in the bundle. Supabase persists the session in the browser so returning helpers aren't prompted every visit.
+- **Never use `VITE_HELPER_PASSWORD`** — setting the access code as a `VITE_` env var embeds it in the JavaScript bundle in plaintext, visible to anyone who opens DevTools. The variable has been removed from the codebase. If you ever find it in your env files, delete it and rotate the Supabase helper password immediately.
+- **Public RSVP** — the `/rsvp` page has zero direct table access. It calls `security definer` RPC functions that expose only the minimum needed: name search and writing RSVP fields. The guest list is never returned to the browser.
 - **Residual risk** — helpers share one login, so anyone with the access code has full admin access. Fine for a small trusted group.
 
 See [`SECURITY.md`](../SECURITY.md) for the full threat model.
