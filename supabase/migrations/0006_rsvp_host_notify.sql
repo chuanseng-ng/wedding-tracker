@@ -1,6 +1,0 @@
--- Absorbed into 0005_email_automation.sql
---
--- The notify_rsvp_status_change() function previously defined here (adding
--- old_rsvp_status to the webhook payload) has been merged back into 0005 so
--- new deployments only need one file. This file is kept as a no-op to avoid
--- disrupting existing deployments that have already run it.

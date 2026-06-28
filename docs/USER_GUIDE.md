@@ -33,11 +33,16 @@ Open the **SQL Editor** in your Supabase dashboard and run the migrations **in o
 | [`0002_draw_and_submissions.sql`](../supabase/migrations/0002_draw_and_submissions.sql) | Lucky-draw number, guest receipt-upload queue (`submissions` table), private `receipts` storage bucket |
 | [`0003_rsvp_seating.sql`](../supabase/migrations/0003_rsvp_seating.sql) | `tables` table; all RSVP columns on guests (`rsvp_status`, `meal_choice`, `email`, etc.); fuzzy name-match RPC (`submit_rsvp_by_name`); relationship taxonomy columns |
 | [`0004_weddings.sql`](../supabase/migrations/0004_weddings.sql) | Singleton `weddings` table; wedding page columns (slug, love story, hero photo, etc.); `get_wedding_config` / `upsert_wedding_config` / `get_public_wedding` RPCs; photo storage bucket |
-| [`0005_email_automation.sql`](../supabase/migrations/0005_email_automation.sql) | `pg_net` extension; RSVP status-change webhook trigger (includes `old_rsvp_status` for host change-of-mind notifications); `last_reminder_sent_at` column — **apply only after completing the email setup in step 5** |
-| [`0006_rsvp_host_notify.sql`](../supabase/migrations/0006_rsvp_host_notify.sql) | No-op — content absorbed into `0005`. Safe to run on existing deployments. |
-| [`0007_second_reminder.sql`](../supabase/migrations/0007_second_reminder.sql) | Adds `second_reminder_sent_at` column so 90-day and 30-day reminders are tracked independently |
+| [`0005_email_automation.sql`](../supabase/migrations/0005_email_automation.sql) | `pg_net` extension; RSVP status-change webhook trigger (with `old_rsvp_status` for host change-of-mind notifications); `second_reminder_sent_at` column — **apply only after completing the email setup in step 5** |
 
 All migrations are idempotent (`CREATE OR REPLACE`, `IF NOT EXISTS`) — safe to re-run.
+
+> **Supabase CLI users (existing deployments):** if you previously applied `0006_rsvp_host_notify.sql` or `0007_second_reminder.sql` via `supabase db push`, those files have been consolidated into `0005`. Remove the stale entries from the migration tracking table to keep the CLI in sync:
+> ```sql
+> delete from supabase_migrations.schema_migrations
+>   where version in ('20240001000006', '20240001000007');
+> ```
+> Replace the version values with the actual timestamps shown in your `supabase_migrations.schema_migrations` table.
 
 > Never use `for all using (true)` — that exposes the entire guest list to anyone with the public anon key.
 

@@ -22,7 +22,7 @@ A quick-scan list of known bugs, deferred work, and housekeeping. Details live i
 | 2 | Email | ~~**Supabase Vault webhook setup is manual**~~ ✅ — `scripts/setup-vault-secrets.sh` reads `.env` and either runs the SQL via the Supabase CLI or prints a pre-filled snippet to paste into the SQL Editor. [Issue #17](https://github.com/shangweisong/wedding-tracker/issues/17) | §Housekeeping |
 | 3 | Wedding Page | **Single template only** — only the Minimal dark-gold theme exists. Additional templates (Floral, Modern, Traditional, Garden) and accent colour picker are pending. | §3.3 |
 | 4 | Docs | ~~**README → User Guide split**~~ ✅ — `docs/USER_GUIDE.md` created; README is now a 1-page overview + quick-start. | §Housekeeping |
-| 5 | Migrations | ~~**Migration consolidation**~~ ✅ — `0006` content merged into `0005`; `0006` is now a no-op comment (safe for existing deployments). `USER_GUIDE.md` migration table updated to list all 7 files. | §Housekeeping |
+| 5 | Migrations | ~~**Migration consolidation**~~ ✅ — `0006` and `0007` content merged into `0005`; both files deleted. Migration table is back to a clean 5-file structure. CLI users: see USER_GUIDE §1a for the one-time tracking cleanup. | §Housekeeping |
 | 6 | Security | ~~**Admin PIN disabled**~~ ✅ — `unlocked` restored to `useState(isDemoMode)`; `VITE_HELPER_PASSWORD` removed (was exposing Supabase password in JS bundle). [PR #31](https://github.com/shangweisong/wedding-tracker/pull/31) | §Security |
 | 7 | Security | ~~**`CRON_SECRET` not enforced**~~ ✅ — now mandatory; returns 500 if env var absent, 401 if header mismatch. | §Security |
 | 8 | Email | ~~**RSVP email buttons undersized**~~ ✅ — reminder CTA bumped to `16px 36px`; "Update RSVP" promoted to outlined button in confirmation/declined emails. | §Security |
@@ -593,7 +593,7 @@ Explicit "intentionally no auth check" comment added in `AdminApp.jsx` near the 
   - `0004_weddings.sql` — weddings table (all columns) + page RPCs + photo bucket
   - `0005_email_automation.sql` — **optional**, apply after Resend + Vercel are configured
   - `reconcile_remote_db.sql` — run once in Supabase SQL Editor on existing projects to sync migration tracking
-- ✅ **Migration consolidation** — `0006`'s function body (adding `old_rsvp_status` to the webhook payload) merged into `0005`. `0006` is now a no-op comment — safe to re-run on existing deployments. `USER_GUIDE.md` migration table updated to list all 7 files including `0007_second_reminder.sql`.
+- ✅ **Migration consolidation** — `0006` (`old_rsvp_status` in webhook payload) and `0007` (`second_reminder_sent_at` column) both merged into `0005` and deleted. Migration folder is back to a clean 5-file structure. CLI users on existing deployments: see USER_GUIDE §1a for the one-time tracking cleanup SQL.
 - ✅ **README → User Guide split** — detailed setup instructions (Supabase, email, Vercel, CSV, PayNow, angbao) extracted to [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md). README is now a 1-page overview + quick-start that links to the guide for depth.
 
 ---

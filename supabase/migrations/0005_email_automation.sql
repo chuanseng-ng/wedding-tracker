@@ -80,3 +80,11 @@ drop trigger if exists guests_rsvp_status_webhook on public.guests;
 create trigger guests_rsvp_status_webhook
   after update on public.guests
   for each row execute function public.notify_rsvp_status_change();
+
+-- ── 3. REMINDER TRACKING COLUMN ──────────────────────────────────────────────
+-- Tracks the 30-day reminder independently from last_reminder_sent_at (which
+-- covers the 90-day reminder in 0003_rsvp_seating.sql) so both thresholds
+-- can fire without interfering with each other.
+
+alter table public.guests
+  add column if not exists second_reminder_sent_at timestamptz;
