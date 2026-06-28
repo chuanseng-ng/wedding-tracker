@@ -24,9 +24,9 @@ A quick-scan list of known bugs, deferred work, and housekeeping. Details live i
 | 4 | Docs | ~~**README → User Guide split**~~ ✅ — `docs/USER_GUIDE.md` created; README is now a 1-page overview + quick-start. | §Housekeeping |
 | 5 | Migrations | **Migration consolidation** — `0006_rsvp_host_notify.sql` patches the trigger from `0005`. Both should be consolidated for clean new deployments, and the README setup table updated. | §Housekeeping |
 | 6 | Security | ~~**Admin PIN disabled**~~ ✅ — `unlocked` restored to `useState(isDemoMode)`; `VITE_HELPER_PASSWORD` removed (was exposing Supabase password in JS bundle). [PR #31](https://github.com/shangweisong/wedding-tracker/pull/31) | §Security |
-| 7 | Security | **`CRON_SECRET` not enforced** — `send-reminders.js` only validates the secret when the env var is set; if omitted, anyone can POST to `/api/send-reminders` and spam reminder emails to all guests. | §Security |
-| 8 | Email | **RSVP email buttons undersized** — reminder email CTA uses modest padding; confirmation email "update your RSVP" is a plain text link, not a button. | §Security |
-| 9 | Security | **PayNow `/#pay` page is fully public** — no auth check; anyone with the URL can access it. Intentional for guest use but worth documenting explicitly. | §Security |
+| 7 | Security | ~~**`CRON_SECRET` not enforced**~~ ✅ — now mandatory; returns 500 if env var absent, 401 if header mismatch. | §Security |
+| 8 | Email | ~~**RSVP email buttons undersized**~~ ✅ — reminder CTA bumped to `16px 36px`; "Update RSVP" promoted to outlined button in confirmation/declined emails. | §Security |
+| 9 | Security | ~~**PayNow `/#pay` page is fully public**~~ ✅ — documented with explicit "intentionally no auth check" comment in `AdminApp.jsx`. | §Security |
 
 ---
 
@@ -565,26 +565,18 @@ Options:
 
 ---
 
-### #7 — Make `CRON_SECRET` mandatory
+### #7 — Make `CRON_SECRET` mandatory ✅ Fixed
 
-`send-reminders.js` only checks the `Authorization` header when `CRON_SECRET` is set (`if (cronSecret && ...)`). If the env var is missing the endpoint is open to anyone, enabling guest-email spam. The guard should be inverted: reject requests unconditionally unless the secret matches, and return 500 if the env var is missing rather than silently skipping the check.
+Guard inverted in `send-reminders.js` — returns 500 if `CRON_SECRET` env var is absent, 401 if the `Authorization` header doesn't match. The endpoint is no longer callable without the secret.
 
-**Fix:** small guard change in `send-reminders.js`. Low risk.
+### #8 — Bigger RSVP email buttons ✅ Fixed
 
----
+- Reminder email (`send-reminders.js`): CTA padding `12px 28px` → `16px 36px`, font size `15px` → `16px`.
+- Confirmation/declined emails (`send-rsvp-email.js`): "Update RSVP" promoted from inline text link to a proper outlined `<a>` button.
 
-### #8 — Bigger RSVP email buttons
+### #9 — PayNow page visibility ✅ Documented
 
-- Reminder email (`send-reminders.js`): increase CTA button padding from `12px 28px` → `16px 36px`, bump font size.
-- Confirmation email (`send-rsvp-email.js`): promote the "update your RSVP" text link to a proper `<a>` styled as a secondary button.
-
-**Fix:** HTML/CSS string edits in two serverless files. Low risk.
-
----
-
-### #9 — PayNow page visibility (document, not fix)
-
-`/#pay` (hash-routed) is intentionally public — guests need it to send ang-bao without logging in. No code change needed. Worth adding a comment in `AdminApp.jsx` near the `route === "pay"` branch to make the intent explicit for future maintainers.
+Explicit "intentionally no auth check" comment added in `AdminApp.jsx` near the `route === "pay"` branch.
 
 ---
 
