@@ -314,8 +314,8 @@ Same .ics attached to the confirmation/reminder emails (3.1c)
 
 **Emails sent:**
 1. **Confirmation email** — sent immediately after a guest submits the RSVP form (whether confirmed or declined), summarising their response + the `.ics` calendar attachment (3.1b) if confirmed
-2. **Reminder email — 90 days before wedding** — sent to all guests still `rsvp_status = 'pending'`, nudging them to respond
-3. **Reminder email — 30 days before wedding** — same, second nudge for guests still `pending`
+2. **Reminder email — 90 days before wedding** — sent to all `confirmed` guests: warm, excited tone with date, venue name, and dress code; links to the wedding page if published
+3. **Reminder email — 30 days before wedding** — sent to all `confirmed` guests: full logistics (schedule, venue + address + Google Maps, dress code, getting there directions) + "Update RSVP" button in case plans changed
 
 **Implementation:**
 - Reuse the Phase 2 Resend setup: `RESEND_API_KEY` + `SUPABASE_SERVICE_ROLE_KEY` as server-only env vars (no `VITE_` prefix) in a Vercel serverless function
