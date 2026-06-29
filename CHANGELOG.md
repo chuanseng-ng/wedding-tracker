@@ -5,6 +5,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [2026-06-29] — docs/readme-hero-gif
+
+### Added
+
+- **README hero GIF** — `docs/demo.gif` placed immediately after the title, covering the Planning/D-Day toggle → RSVP submission → seating auto-suggest → lock a table flow.
+- **README Screenshots section** — `## Screenshots` added after Features with per-section PNGs (`docs/screenshot-*.png`) stored in `docs/`.
+
+---
+
 ## [2026-06-29] — feat/delete-guest-reset-seating (PR #35)
 
 ### Added
