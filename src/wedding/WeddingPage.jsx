@@ -257,7 +257,11 @@ const styles = theme + `
   [data-theme="garden"] .wp-cta-btn:hover { background: #1a3310; }
 
   /* ── CHINESE (RED & GOLD) THEME ────────────────────────────────────────────── */
-  [data-theme="chinese"].wp { background: #fff5f5; }
+  [data-theme="chinese"].wp {
+    background-color: #fff5f5;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Ctext x='12' y='80' font-family='serif' font-size='72' font-weight='900' fill='%23c9a84c' opacity='0.1' transform='rotate(-10 52 64)'%3E%E5%96%9C%3C/text%3E%3Ctext x='94' y='162' font-family='serif' font-size='72' font-weight='900' fill='%23c9a84c' opacity='0.1' transform='rotate(8 134 146)'%3E%E5%96%9C%3C/text%3E%3C/svg%3E");
+    background-size: 180px 180px;
+  }
   [data-theme="chinese"] {
     --gold:       #c9a84c;
     --gold-light: #f5dc80;
@@ -287,18 +291,18 @@ function LeafIcon({ style }) {
 }
 
 const GARDEN_LEAVES = [
-  { top: "20%",  left: "-14px",  rot: 15,   w: 46, h: 76 },
-  { top: "26%",  right: "-12px", rot: -150, w: 38, h: 63 },
-  { top: "37%",  left: "-10px",  rot: 40,   w: 32, h: 53 },
-  { top: "43%",  right: "-10px", rot: 175,  w: 50, h: 83 },
-  { top: "55%",  left: "-16px",  rot: -25,  w: 42, h: 70 },
-  { top: "61%",  right: "-8px",  rot: 95,   w: 36, h: 60 },
-  { top: "70%",  left: "-8px",   rot: 130,  w: 30, h: 50 },
-  { top: "78%",  right: "-14px", rot: -70,  w: 44, h: 73 },
-  { top: "87%",  left: "-12px",  rot: 200,  w: 38, h: 63 },
-  { top: "93%",  right: "-10px", rot: 120,  w: 34, h: 56 },
-  { top: "48%",  left: "10px",   rot: 60,   w: 22, h: 36 },
-  { top: "66%",  right: "8px",   rot: -40,  w: 20, h: 33 },
+  { top: "20%",  left: "-20px",  rot: 15,   w: 74,  h: 122 },
+  { top: "26%",  right: "-18px", rot: -150, w: 61,  h: 101 },
+  { top: "37%",  left: "-16px",  rot: 40,   w: 51,  h: 85  },
+  { top: "43%",  right: "-16px", rot: 175,  w: 80,  h: 133 },
+  { top: "55%",  left: "-22px",  rot: -25,  w: 67,  h: 112 },
+  { top: "61%",  right: "-14px", rot: 95,   w: 58,  h: 96  },
+  { top: "70%",  left: "-14px",  rot: 130,  w: 48,  h: 80  },
+  { top: "78%",  right: "-20px", rot: -70,  w: 70,  h: 117 },
+  { top: "87%",  left: "-18px",  rot: 200,  w: 61,  h: 101 },
+  { top: "93%",  right: "-16px", rot: 120,  w: 54,  h: 90  },
+  { top: "48%",  left: "12px",   rot: 60,   w: 33,  h: 54  },
+  { top: "66%",  right: "10px",  rot: -40,  w: 30,  h: 50  },
 ];
 
 function heroGradient(t) {

@@ -178,7 +178,11 @@ const styles = theme + `
     --brown:      #8b1a1a;
     --warm-white: #fff5f5;
   }
-  [data-theme="chinese"].rsvp-wrap { background: #fff0f0; }
+  [data-theme="chinese"].rsvp-wrap {
+    background-color: #fff0f0;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Ctext x='12' y='80' font-family='serif' font-size='72' font-weight='900' fill='%23c9a84c' opacity='0.08' transform='rotate(-10 52 64)'%3E%E5%96%9C%3C/text%3E%3Ctext x='94' y='162' font-family='serif' font-size='72' font-weight='900' fill='%23c9a84c' opacity='0.08' transform='rotate(8 134 146)'%3E%E5%96%9C%3C/text%3E%3C/svg%3E");
+    background-size: 180px 180px;
+  }
   [data-theme="chinese"] .rsvp-card        { border-color: rgba(180,0,0,0.15); }
   [data-theme="chinese"] .rsvp-divider     { background: rgba(180,0,0,0.15); }
   [data-theme="chinese"] .rsvp-input       { border-color: rgba(180,0,0,0.2); }
