@@ -172,7 +172,8 @@ export function computeWrapped(guests) {
 
   // ── Hall of Silence — random sample of up to 3 guests who said nothing ──
   // Math.random() is intentional: different people called out each time Generate is clicked.
-  const silent = guests.filter(g => !(g.rsvp_message || '').trim());
+  // Family/relatives are excluded — no shaming the elders 😅
+  const silent = guests.filter(g => !(g.rsvp_message || '').trim() && g.relationship_group !== 'family');
   const silentGuests = shuffled(silent).slice(0, 3);
 
   return {
