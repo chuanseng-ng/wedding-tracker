@@ -8,7 +8,7 @@ This document outlines the planned development for Phase 2 and Phase 3 of the We
 Phase 1 ✅  Wedding Day Attendance + Angbao Tracking
 Phase 2 ✅  RSVP Collection + Table Assignment Planning
 Phase 3 ✅  Personalised Wedding Page  (seating ✅, emails ✅, setup ✅, public page ✅)
-Phase 4     Fun to Have — Wedding Wishes Wrapped
+Phase 4 ✅  Fun to Have — Wedding Wishes Wrapped
 ```
 
 ---
@@ -28,7 +28,7 @@ A quick-scan list of known bugs, deferred work, and housekeeping. Details live i
 | 7 | Security | ~~**`CRON_SECRET` not enforced**~~ ✅ — now mandatory; returns 500 if env var absent, 401 if header mismatch. | §Security |
 | 8 | Email | ~~**RSVP email buttons undersized**~~ ✅ — reminder CTA bumped to `16px 36px`; "Update RSVP" promoted to outlined button in confirmation/declined emails. | §Security |
 | 9 | Security | ~~**PayNow `/#pay` page is fully public**~~ ✅ — documented with explicit "intentionally no auth check" comment in `AdminApp.jsx`. | §Security |
-| 10 | Wishes Wrapped | **Not started** — Spotify Wrapped-style presentation of guest well wishes. MVP is pure stats (no AI); presentation mode + AI tier are follow-ons. | §4 |
+| 10 | Wishes Wrapped | ~~**Not started**~~ ✅ — Phase 4 complete: pure-stats engine, Elegant + Vibrant themes, Hall of Silence MC callout, per-slide toggle, 114 unit tests. AI tier and keepsake export remain optional follow-ons. | §4 |
 
 ---
 
@@ -741,12 +741,14 @@ Allow exporting the Wrapped as:
 
 ### Phase 4 Build Order
 
-1. `src/admin/wishesWrapped.js` — pure stats + awards functions + unit tests
-2. Admin **Wishes Wrapped tab** — generate button, ephemeral preview, enter-presentation button
-3. `/wishes-wrapped` route — slide components, keyboard nav, fullscreen, auto-advance
-4. *(Optional)* `api/generate-wishes-wrapped.js` — AI tier (needs `OPENAI_API_KEY`)
-5. *(Optional)* Persist `wishes_wrapped_json` in `weddings` table — `0006_wishes_wrapped.sql`
-6. *(Optional)* Keepsake export — JSON first, then PDF/images
+1. ✅ `src/admin/wishesWrapped.js` — pure stats + awards + participation commentary + sides + clusters + emojis + opening word + novel pages + Hall of Silence. 114 unit tests.
+2. ✅ Admin **Wishes Wrapped tab** — generate button, stat cards, theme toggle (Elegant / Vibrant), per-slide toggle chips (All / None shortcuts), enter-presentation button.
+3. ✅ `/wishes-wrapped` route — 10 slide types, keyboard nav (`←` `→` `Space`), 8-second auto-advance, fullscreen API, two themes, slide selection from session.
+4. ✅ **Hall of Silence** — random 3-person callout with MC prompt; re-shuffled on each Generate.
+5. ✅ **Per-slide toggle** — `SLIDE_TOGGLES` predicate array; `enabledSlides` Set serialised through `localStorage`.
+6. *(Optional)* `api/generate-wishes-wrapped.js` — AI tier (needs `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`, server-only)
+7. *(Optional)* Persist `wishes_wrapped_json` in `weddings` table — `0006_wishes_wrapped.sql`
+8. *(Optional)* Keepsake export — JSON download first, then PDF/images via `html2canvas` + `jsPDF`
 
 ---
 

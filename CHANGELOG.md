@@ -5,20 +5,35 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [2026-06-29] — feat/wedding-wishes-wrapped
+## [2026-06-29] — feat/wedding-wishes-wrapped (Phase 4 complete)
 
 ### Added
 
-- **Wedding Wishes Wrapped (Phase 4 MVP)** — Spotify Wrapped–style presentation of guest well-wishes, built entirely from the existing `guests.rsvp_message` field with no new DB columns or AI calls.
-  - **`src/admin/wishesWrapped.js`** — pure stats engine: total wishes, total words, average length, top-30 word cloud (stop-word filtered), and up to 5 guest awards (Most Words, Most Enthusiastic, Emoji Champion, Most Poetic, Keeping It Short & Sweet). Fully unit-tested (`wishesWrapped.test.js`, 13 cases).
-  - **`src/admin/WishesWrappedTab.jsx`** — new "✨ Wishes Wrapped" tab in the Planning mode admin panel. Shows a Generate button, stat cards, top-word chips, and a scrollable message list. "Open Presentation" stores data in `localStorage` and opens the presentation page in a new tab.
-  - **`src/wishes-wrapped/WishesWrappedPage.jsx`** — fullscreen presentation at `/wishes-wrapped`. Slides: Title → By the Numbers → Word Cloud → Award slides → Thank You. Keyboard navigation (`←` `→` `Space`), 8-second auto-advance toggle, fullscreen API toggle.
+- **Hall of Silence slide** — up to 3 randomly-sampled guests who left no well-wish are called out with an MC prompt: "give them the mike!" (`SilenceSlide`). Re-shuffled every Generate click for a surprise reveal. Deep crimson Vibrant gradient.
+  - `wishesWrapped.js` — `shuffled()` Fisher-Yates helper; `silentGuests` included in the stats return object.
+  - 3 new unit tests; 114 total, all passing.
+- **Per-slide toggle UI** (`WishesWrappedTab.jsx`) — chip panel listing all applicable slides after generating. Click to enable/disable; All / None shortcuts. Inapplicable slides (no emojis → Emoji Report, no side data → Bride vs Groom, etc.) are hidden rather than greyed out. Selection persisted in `localStorage` and respected by the presentation page.
+- **`SLIDE_TOGGLES` constant** — 8 slide definitions each with a `check(data)` predicate.
+- **`buildSlides` updated** — accepts `enabledSlides: Set<string>`; empty set = all slides shown (backwards compatible with old sessions).
+
+---
+
+## [2026-06-29] — feat/wedding-wishes-wrapped (Phase 4 MVP)
+
+### Added
+
+- **Wedding Wishes Wrapped** — Spotify Wrapped–style presentation of guest well-wishes, built entirely from the existing `guests.rsvp_message` field with no new DB columns or AI calls.
+  - **`src/admin/wishesWrapped.js`** — pure stats engine: total wishes, total words, average length, participation rate with tiered commentary, top-30 word cloud (stop-word filtered), Bride vs Groom head-to-head, personality clusters (essayists / brief / emoji-lovers / shouty), emoji leaderboard, most common opening word, novel-pages equivalent, and up to 5 guest awards (Most Words, Most Enthusiastic, Emoji Champion, Most Poetic, Keeping It Short & Sweet). Fully unit-tested (111 cases on release).
+  - **`src/admin/WishesWrappedTab.jsx`** — new "✨ Wishes Wrapped" tab in the Planning mode admin panel. Generate button, stat cards, top-word chips, scrollable message list, and theme toggle (Elegant / Vibrant). "Open Presentation" stores data in `localStorage` and opens the presentation page in a new tab.
+  - **`src/wishes-wrapped/WishesWrappedPage.jsx`** — fullscreen presentation at `/wishes-wrapped`. Slides: Title → Participation → Hall of Silence → By the Numbers → Bride vs Groom → Personality Clusters → Word Cloud → Emoji Report → Award slides → Thank You. Keyboard navigation (`←` `→` `Space`), 8-second auto-advance toggle, fullscreen API toggle. Two themes: **Elegant** (dark gold, Cormorant Garamond) and **Vibrant** (bold per-slide gradients, Spotify Wrapped-style).
   - **`src/main.jsx`** — `/wishes-wrapped` route added.
-- **Phase 4 roadmap** — `ROADMAP.md` updated with the full Phase 4 spec (§4.1–§4.7 + build order).
+  - **`test-guests-50.csv`** — 50-row confirmed-guest test file (25 bride / 25 groom, diverse well-wishes, ~84% participation) for manual QA.
+- **Phase 4 roadmap** — `ROADMAP.md` updated with the full Phase 4 spec.
 
 ### Changed
 
 - **Demo data enriched** — four previously empty `rsvp_message` fields in `DEMO_GUESTS` now have realistic well-wish messages so the Wishes Wrapped tab is usable in demo mode without a real Supabase connection.
+- **CSV parser extended** — `src/lib/csv.js` now parses `rsvp_status`, `rsvp_message`, and `meal_choice` columns from uploaded CSVs.
 
 ---
 
