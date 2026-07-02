@@ -5,6 +5,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [2026-07-03] — feat/40-note-to-guests (#40)
+
+### Added
+
+- **RSVP form — "Would you like to give a speech?"** — a three-state (unanswered / Yes / No) question shown to attending guests. Stored on `guests.wants_to_speak`; the admin RSVP tab shows a 🎤 marker for volunteers and lets helpers edit the answer.
+- **RSVP form — Note to Guests notices** — couples can set optional **Parking** and **Smoking** notices under **Wedding Setup → Wedding Page → Note to Guests**; each appears on the RSVP form (when attending) only if filled. Stored on new `weddings.smoking_notice` / `weddings.parking_notice` columns.
+
+### Changed
+
+- `submit_rsvp` and `get_guest_by_rsvp_token` RPCs carry `wants_to_speak`; `get_wedding_config` / `upsert_wedding_page` carry the two notice fields.
+
+> Migrations `0003_rsvp_seating.sql` and `0004_weddings.sql` were updated in place (idempotent). Re-run both in the Supabase SQL editor.
+
+---
+
 ## [2026-07-02] — feat/42-fun-rsvp-options (#42)
 
 ### Added

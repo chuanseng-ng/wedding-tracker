@@ -13,6 +13,7 @@ const FRIEND_SUBGROUP_OPTIONS = [
   ["secondary_school", "Secondary School"], ["tertiary", "JC / Poly"],
   ["university", "University"], ["other", "Other"], ["secret", "😏 It's a secret"],
 ];
+const SPEECH_OPTIONS = [["", "Not set"], ["yes", "Yes"], ["no", "No"]];
 const PARTY_OPTIONS = [
   ["", "Not set"], ["bride", "Bride"], ["groom", "Groom"],
 ];
@@ -112,6 +113,7 @@ export default function RsvpTab({ guests, onUpdate, onDelete, showToast }) {
       friend_subgroup: g.friend_subgroup || "",
       party: g.party || "",
       email: g.email || "",
+      wants_to_speak: g.wants_to_speak || "",
     });
   };
 
@@ -125,6 +127,7 @@ export default function RsvpTab({ guests, onUpdate, onDelete, showToast }) {
       friend_subgroup: editForm.relationship_group === "friends" ? editForm.friend_subgroup : "",
       party: editForm.party,
       email: editForm.email.trim(),
+      wants_to_speak: editForm.wants_to_speak,
     };
     if (editForm.rsvp_status !== (g.rsvp_status || "pending")) {
       patch.rsvp_at = new Date().toISOString();
@@ -235,6 +238,7 @@ export default function RsvpTab({ guests, onUpdate, onDelete, showToast }) {
                               : g.relationship_group)
                           : null,
                         g.plus_one_name?.trim() ? `+1: ${g.plus_one_name}` : null,
+                        g.wants_to_speak === "yes" ? "🎤 speech" : null,
                         g.dietary_notes?.trim() || null,
                         g.email?.trim() || null,
                       ]
@@ -387,6 +391,20 @@ export default function RsvpTab({ guests, onUpdate, onDelete, showToast }) {
                         </select>
                       </div>
                     )}
+                    <div className="rsvp-edit-group">
+                      <label className="rsvp-edit-label">Wants to speak?</label>
+                      <select
+                        className="rsvp-edit-select"
+                        value={editForm.wants_to_speak}
+                        onChange={(e) =>
+                          setEditForm({ ...editForm, wants_to_speak: e.target.value })
+                        }
+                      >
+                        {SPEECH_OPTIONS.map(([v, l]) => (
+                          <option key={v} value={v}>{l}</option>
+                        ))}
+                      </select>
+                    </div>
                     <div className="rsvp-edit-footer">
                       <button
                         className="rsvp-btn rsvp-btn-cancel"
