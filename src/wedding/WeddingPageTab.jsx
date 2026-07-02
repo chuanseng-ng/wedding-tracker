@@ -228,6 +228,8 @@ export default function WeddingPageTab({ wedding, onSave, showToast }) {
   const [rsvpDeadline, setRsvpDeadline] = useState("");
   const [mealOptions, setMealOptions]   = useState("");
   const [gettingThere, setGettingThere] = useState("");
+  const [smokingNotice, setSmokingNotice] = useState("");
+  const [parkingNotice, setParkingNotice] = useState("");
   const [isPublished, setIsPublished]   = useState(false);
   const [pageTheme, setPageTheme]       = useState("minimal");
   const [enableFunRsvpOptions, setEnableFunRsvpOptions] = useState(false);
@@ -250,6 +252,10 @@ export default function WeddingPageTab({ wedding, onSave, showToast }) {
     setMealOptions(wedding.meal_options || "");
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setGettingThere(wedding.getting_there || "");
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSmokingNotice(wedding.smoking_notice || "");
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setParkingNotice(wedding.parking_notice || "");
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsPublished(wedding.is_published || false);
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -327,6 +333,8 @@ export default function WeddingPageTab({ wedding, onSave, showToast }) {
       getting_there:   gettingThere.trim(),
       theme:           pageTheme,
       enable_fun_rsvp_options: enableFunRsvpOptions,
+      smoking_notice:  smokingNotice.trim(),
+      parking_notice:  parkingNotice.trim(),
     });
     setSaving(false);
   };
@@ -468,6 +476,38 @@ export default function WeddingPageTab({ wedding, onSave, showToast }) {
           />
           <div style={{ fontSize: 11, color: "var(--brown)", opacity: 0.4, textAlign: "right", marginTop: 4 }}>
             {gettingThere.length} / 2000
+          </div>
+        </div>
+
+        {/* ── NOTE TO GUESTS ── */}
+        <div className="wpt-card">
+          <div className="wpt-card-title">Note to Guests</div>
+          <div className="wpt-card-sub">
+            Optional notices shown on the RSVP form (only when attending). Leave a field blank to hide it.
+          </div>
+          <label className="wpt-label">Parking notice</label>
+          <textarea
+            className="wpt-textarea"
+            style={{ minHeight: 72 }}
+            value={parkingNotice}
+            onChange={(e) => setParkingNotice(e.target.value)}
+            placeholder="e.g. Free parking at Basement 2; validate your ticket at the reception table."
+            maxLength={500}
+          />
+          <div style={{ fontSize: 11, color: "var(--brown)", opacity: 0.4, textAlign: "right", marginTop: 4 }}>
+            {parkingNotice.length} / 500
+          </div>
+          <label className="wpt-label" style={{ marginTop: 12 }}>Smoking notice</label>
+          <textarea
+            className="wpt-textarea"
+            style={{ minHeight: 72 }}
+            value={smokingNotice}
+            onChange={(e) => setSmokingNotice(e.target.value)}
+            placeholder="e.g. Smoking is only permitted at the designated area outside the main lobby."
+            maxLength={500}
+          />
+          <div style={{ fontSize: 11, color: "var(--brown)", opacity: 0.4, textAlign: "right", marginTop: 4 }}>
+            {smokingNotice.length} / 500
           </div>
         </div>
 

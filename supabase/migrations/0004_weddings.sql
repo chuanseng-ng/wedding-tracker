@@ -33,6 +33,9 @@ create table if not exists public.weddings (
   theme             text        default 'minimal',
   -- Opt-in playful RSVP dropdown options ("It's complicated" / "It's a secret") — #42
   enable_fun_rsvp_options boolean default false,
+  -- Display-only notices shown to guests on the RSVP form (#40)
+  smoking_notice    text        default '' check (char_length(smoking_notice) <= 500),
+  parking_notice    text        default '' check (char_length(parking_notice) <= 500),
   updated_at        timestamptz not null default now()
 );
 
@@ -49,6 +52,10 @@ alter table public.weddings add column if not exists theme text default 'minimal
 
 -- Opt-in playful RSVP dropdown options — absent on existing DBs (#42).
 alter table public.weddings add column if not exists enable_fun_rsvp_options boolean default false;
+
+-- Display-only RSVP notices — absent on existing DBs (#40).
+alter table public.weddings add column if not exists smoking_notice text default '';
+alter table public.weddings add column if not exists parking_notice text default '';
 
 -- ── 2. STORAGE BUCKET (hero photos) ──────────────────────────────────────────
 
@@ -99,7 +106,9 @@ returns table (
   meal_options      text,
   getting_there     text,
   theme             text,
-  enable_fun_rsvp_options boolean
+  enable_fun_rsvp_options boolean,
+  smoking_notice    text,
+  parking_notice    text
 )
 language sql
 security definer
@@ -125,7 +134,9 @@ as $$
     coalesce(meal_options, ''),
     coalesce(getting_there, ''),
     coalesce(theme, 'minimal'),
-    coalesce(enable_fun_rsvp_options, false)
+    coalesce(enable_fun_rsvp_options, false),
+    coalesce(smoking_notice, ''),
+    coalesce(parking_notice, '')
   from public.weddings
   limit 1;
 $$;
@@ -188,6 +199,7 @@ grant execute on function public.upsert_wedding_config(text, text, date, text, t
 drop function if exists public.upsert_wedding_page(text, text, text, text, jsonb, date, boolean, text);
 drop function if exists public.upsert_wedding_page(text, text, text, text, jsonb, date, boolean, text, text);
 drop function if exists public.upsert_wedding_page(text, text, text, text, jsonb, date, boolean, text, text, text);
+drop function if exists public.upsert_wedding_page(text, text, text, text, jsonb, date, boolean, text, text, text, boolean);
 
 create or replace function public.upsert_wedding_page(
   p_slug            text,
@@ -200,7 +212,9 @@ create or replace function public.upsert_wedding_page(
   p_meal_options    text,
   p_getting_there   text default '',
   p_theme           text default 'minimal',
-  p_enable_fun_rsvp_options boolean default false
+  p_enable_fun_rsvp_options boolean default false,
+  p_smoking_notice  text default '',
+  p_parking_notice  text default ''
 )
 returns void
 language plpgsql
@@ -212,7 +226,8 @@ begin
     bride_name, groom_name,
     slug, love_story, dress_code, hero_image_url,
     fun_qa, rsvp_deadline, is_published, meal_options,
-    getting_there, theme, enable_fun_rsvp_options, updated_at
+    getting_there, theme, enable_fun_rsvp_options,
+    smoking_notice, parking_notice, updated_at
   ) values (
     '', '',
     p_slug,
@@ -226,6 +241,8 @@ begin
     left(coalesce(p_getting_there, ''), 2000),
     coalesce(p_theme, 'minimal'),
     coalesce(p_enable_fun_rsvp_options, false),
+    left(coalesce(p_smoking_notice, ''), 500),
+    left(coalesce(p_parking_notice, ''), 500),
     now()
   )
   on conflict ((true)) do update set
@@ -240,11 +257,13 @@ begin
     getting_there  = left(coalesce(p_getting_there, ''), 2000),
     theme          = coalesce(p_theme, 'minimal'),
     enable_fun_rsvp_options = coalesce(p_enable_fun_rsvp_options, false),
+    smoking_notice = left(coalesce(p_smoking_notice, ''), 500),
+    parking_notice = left(coalesce(p_parking_notice, ''), 500),
     updated_at     = now();
 end;
 $$;
 
-grant execute on function public.upsert_wedding_page(text, text, text, text, jsonb, date, boolean, text, text, text, boolean)
+grant execute on function public.upsert_wedding_page(text, text, text, text, jsonb, date, boolean, text, text, text, boolean, text, text)
   to anon, authenticated;
 
 -- 3d. Public page lookup by slug (used by /wedding/:slug route).

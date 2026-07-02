@@ -8,6 +8,7 @@ import {
   cleanEmail,
   cleanRelationshipGroup,
   cleanFriendSubgroup,
+  cleanSpeech,
   MAX_NAME,
   MAX_NOTES,
   MAX_ANGBAO,
@@ -73,6 +74,20 @@ describe("cleanFriendSubgroup", () => {
   it("rejects unknown values", () => {
     expect(cleanFriendSubgroup("kindergarten")).toBe("");
     expect(cleanFriendSubgroup(null)).toBe("");
+  });
+});
+
+describe("cleanSpeech", () => {
+  it("accepts the three states '', 'yes', 'no' (#40)", () => {
+    expect(cleanSpeech("yes")).toBe("yes");
+    expect(cleanSpeech(" No ")).toBe("no");
+    expect(cleanSpeech("")).toBe("");
+  });
+
+  it("rejects anything else", () => {
+    expect(cleanSpeech("maybe")).toBe("");
+    expect(cleanSpeech(null)).toBe("");
+    expect(cleanSpeech(true)).toBe("");
   });
 });
 

@@ -97,6 +97,12 @@ alter table public.guests
       '', 'army', 'primary_school', 'secondary_school', 'tertiary', 'university', 'other', 'secret'
     ));
 
+-- "Do you want to give a speech?" — three-state answer collected on the RSVP
+-- form: '' (unanswered), 'yes', or 'no' (#40).
+alter table public.guests
+  add column if not exists wants_to_speak text not null default ''
+    check (wants_to_speak in ('', 'yes', 'no'));
+
 alter table public.guests
   add column if not exists rsvp_message text not null default ''
     check (char_length(rsvp_message) <= 500);
@@ -143,7 +149,8 @@ returns table (
   friend_subgroup    text,
   party              text,
   rsvp_message       text,
-  email              text
+  email              text,
+  wants_to_speak     text
 )
 language sql
 security definer
@@ -152,7 +159,7 @@ as $$
   select
     id, name, rsvp_status, meal_choice,
     plus_one_name, dietary_notes, relationship_group, friend_subgroup, party, rsvp_message,
-    email
+    email, wants_to_speak
   from public.guests
   where rsvp_token = p_token;
 $$;
@@ -174,7 +181,8 @@ create or replace function public.submit_rsvp(
   p_friend_subgroup    text default '',
   p_party              text default '',
   p_message            text default '',
-  p_email              text default ''
+  p_email              text default '',
+  p_wants_to_speak     text default ''
 )
 returns void
 language plpgsql
@@ -215,6 +223,10 @@ begin
     email              = case
       when p_email != '' then left(coalesce(p_email, ''), 254)
       else email
+    end,
+    wants_to_speak     = case
+      when p_wants_to_speak in ('', 'yes', 'no') then p_wants_to_speak
+      else wants_to_speak
     end
   where rsvp_token = p_token;
 
@@ -224,7 +236,7 @@ begin
 end;
 $$;
 
-grant execute on function public.submit_rsvp(uuid, text, text, text, text, text, text, text, text, text) to anon, authenticated;
+grant execute on function public.submit_rsvp(uuid, text, text, text, text, text, text, text, text, text, text) to anon, authenticated;
 
 -- 4c. Fuzzy name-based RSVP submission (fallback when no token link).
 --     Raises: 'not_found' | 'ambiguous' | 'invalid_status'

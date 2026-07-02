@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { sb, isDemoMode } from "../lib/supabase.js";
 import { theme } from "../shared/theme.js";
-import { cleanName, cleanNotes, cleanParty, cleanRelationshipGroup, cleanFriendSubgroup, cleanEmail } from "../lib/validation.js";
+import { cleanName, cleanNotes, cleanParty, cleanRelationshipGroup, cleanFriendSubgroup, cleanEmail, cleanSpeech } from "../lib/validation.js";
 
 const MEAL_OPTIONS = ["Halal", "Vegetarian", "Normal"];
 
@@ -287,6 +287,7 @@ export default function RsvpPage() {
   const [dietary, setDietary]         = useState("");
   const [relationshipGroup, setRelationshipGroup] = useState("");
   const [friendSubgroup, setFriendSubgroup]        = useState("");
+  const [wantsToSpeak, setWantsToSpeak]            = useState("");
   const [closerTo, setCloserTo]                    = useState("");
   const [message, setMessage]         = useState("");
   const [error, setError]             = useState("");
@@ -338,6 +339,7 @@ export default function RsvpPage() {
         setRelationshipGroup(g.relationship_group ?? "");
         setFriendSubgroup(g.friend_subgroup ?? "");
         setCloserTo(g.party ?? "");
+        setWantsToSpeak(g.wants_to_speak ?? "");
         setMessage(g.rsvp_message ?? "");
       })
       .catch(() => {})
@@ -408,6 +410,7 @@ export default function RsvpPage() {
         p_friend_subgroup:    relationshipGroup === "friends" ? cleanFriendSubgroup(friendSubgroup) : "",
         p_party:              cleanParty(closerTo),
         p_email:              cleanEmail(email),
+        p_wants_to_speak:     attending ? cleanSpeech(wantsToSpeak) : "",
       });
       setDone(true);
     } catch (err) {
@@ -623,6 +626,42 @@ export default function RsvpPage() {
                       onChange={(e) => setDietary(e.target.value)}
                     />
                   </div>
+
+                  {/* Do you want to give a speech? — three-state (unset toggles off) */}
+                  <div className="rsvp-field">
+                    <span className="rsvp-label">Would you like to give a speech?</span>
+                    <div className="attend-btns">
+                      <button type="button"
+                        className={`attend-btn yes ${wantsToSpeak === "yes" ? "active" : ""}`}
+                        onClick={() => setWantsToSpeak(wantsToSpeak === "yes" ? "" : "yes")}>
+                        🎤&nbsp; Yes, I'd love to
+                      </button>
+                      <button type="button"
+                        className={`attend-btn no ${wantsToSpeak === "no" ? "active" : ""}`}
+                        onClick={() => setWantsToSpeak(wantsToSpeak === "no" ? "" : "no")}>
+                        No, thanks
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Note to guests — display-only notices configured by the couple */}
+                  {(wedding?.parking_notice || wedding?.smoking_notice) && (
+                    <div className="rsvp-field">
+                      <span className="rsvp-label">Note to guests</span>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                        {wedding?.parking_notice && (
+                          <div style={{ fontSize: 14, lineHeight: 1.5, padding: "10px 12px", borderRadius: 10, background: "rgba(0,0,0,0.04)" }}>
+                            <strong>🅿️ Parking:</strong> {wedding.parking_notice}
+                          </div>
+                        )}
+                        {wedding?.smoking_notice && (
+                          <div style={{ fontSize: 14, lineHeight: 1.5, padding: "10px 12px", borderRadius: 10, background: "rgba(0,0,0,0.04)" }}>
+                            <strong>🚭 Smoking:</strong> {wedding.smoking_notice}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
