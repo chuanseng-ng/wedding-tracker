@@ -5,6 +5,32 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [2026-07-03] — feat/53-content-translations (#53, Phase 2)
+
+### Added
+
+- **Couple-content translations (中文)** — the couple can now translate their own wedding-page/RSVP text (love story, dress code, venue, getting-there, notices, and each Fun Fact Q&A) into Traditional Chinese under **Wedding Setup → Wedding Page → 中文 translations**. When a guest switches the public page to 中文, translated fields are shown; any blank field falls back to English per-field.
+- **Auto-translate** — an "Auto-translate from English" button drafts all fields via a free translation API (MyMemory) through a same-origin `/api/translate` proxy (no API key; optional `MYMEMORY_EMAIL` raises the quota). Drafts are fully editable before saving.
+- New `weddings.content_translations jsonb` column (shape `{ "<locale>": { <field>…, fun_qa: [{id,q,answer}] } }`), threaded through `get_wedding_config`, `get_public_wedding`, and `upsert_wedding_page`. A `localizeWedding()` helper applies the overrides on the public pages (unit-tested).
+
+> Migration `0004_weddings.sql` was updated in place (idempotent). Re-run it in the Supabase SQL editor.
+
+---
+
+## [2026-07-03] — feat/53-i18n-public-pages (#53, Phase 1)
+
+### Added
+
+- **Multi-language public pages (English / 中文)** — the guest-facing Wedding page and RSVP form can now switch between English and Traditional Chinese via an `EN | 中文` toggle (top-right). The choice is remembered in `localStorage` and falls back to the browser language.
+- Lightweight in-app i18n (`src/i18n/`) — a message-catalog + `t()` helper + React context, no new dependency. ~95 UI-chrome strings externalised across `WeddingPage.jsx` and `RsvpPage.jsx`; dates/times now localise via `Intl.DateTimeFormat`. A unit test enforces that the `en` and `zh-TW` catalogs stay key-for-key in sync.
+
+### Notes
+
+- **Phase 1 = UI chrome only.** App-owned labels are translated; the couple's own content (love story, venue, Q&A answers, notices) stays as entered. RSVP dropdown **labels** translate while the stored **values** are unchanged. Admin UI and emails remain English.
+- Phase 2 (couple-content translations with an auto-translate draft) is planned as a follow-up.
+
+---
+
 ## [2026-07-03] — feat/38-plus-x-guests (#38)
 
 ### Added
