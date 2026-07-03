@@ -305,6 +305,11 @@ begin
   where primary_guest_id = v_primary_id
     and lower(trim(name)) <> all (select lower(x) from unnest(v_clean) as x);
 
+  -- Keep kept children's party in sync with the primary's current side.
+  update public.guests
+  set party = v_party
+  where primary_guest_id = v_primary_id;
+
   -- Add newly-listed names not already present as a child of this primary.
   insert into public.guests (name, primary_guest_id, party, rsvp_status)
   select nm, v_primary_id, v_party, p_status

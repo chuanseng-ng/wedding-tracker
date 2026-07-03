@@ -161,7 +161,7 @@ export default function RsvpTab({ guests, onUpdate, onDelete, showToast }) {
         {/* Stats */}
         <div className="rsvp-stats-grid">
           <div className="rsvp-stat-card">
-            <div className="rsvp-stat-big">{guests.length}</div>
+            <div className="rsvp-stat-big">{primaries.length}</div>
             <div className="rsvp-stat-label">Total Invited</div>
           </div>
           <div className="rsvp-stat-card">
@@ -186,8 +186,8 @@ export default function RsvpTab({ guests, onUpdate, onDelete, showToast }) {
             <div className="rsvp-stat-big">{pending.length}</div>
             <div className="rsvp-stat-label">Awaiting Reply</div>
             <div className="rsvp-stat-sub">
-              {guests.length > 0
-                ? Math.round(((guests.length - pending.length) / guests.length) * 100)
+              {primaries.length > 0
+                ? Math.round(((primaries.length - pending.length) / primaries.length) * 100)
                 : 0}
               % responded
             </div>
