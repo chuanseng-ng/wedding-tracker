@@ -24,7 +24,9 @@ function readInitialLocale() {
     /* localStorage may be unavailable (private mode) */
   }
   try {
-    if (typeof navigator !== "undefined" && /^zh/i.test(navigator.language || "")) {
+    // Only auto-pick Traditional Chinese for Traditional locales (TW/HK/Hant);
+    // Simplified (zh-CN, zh-SG, zh-Hans) falls through to English until we ship it.
+    if (typeof navigator !== "undefined" && /^zh-(tw|hk|hant)\b/i.test(navigator.language || "")) {
       return "zh-TW";
     }
   } catch {

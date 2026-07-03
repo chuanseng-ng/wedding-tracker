@@ -3,14 +3,14 @@ import { LOCALES, useLocale } from "./index.jsx";
 // A compact EN | 中文 toggle for the public pages. Self-styled (inline) so it
 // works on any page/theme without extra CSS.
 export default function LanguageSwitcher({ style }) {
-  const { locale, setLocale } = useLocale();
+  const { locale, setLocale, t } = useLocale();
   const codes = Object.keys(LOCALES);
   if (codes.length < 2) return null;
 
   return (
     <div
       role="group"
-      aria-label="Language"
+      aria-label={t("common.language")}
       style={{
         display: "inline-flex",
         gap: 2,

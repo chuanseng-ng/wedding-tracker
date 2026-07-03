@@ -5,6 +5,7 @@ export default {
   // ── Shared ──────────────────────────────────────────────────────────────
   "common.selectOne": "Select one…",
   "common.optional": "(optional)",
+  "common.language": "Language",
 
   // ── Wedding page ────────────────────────────────────────────────────────
   "wedding.docTitle": "{bride} & {groom} · Wedding",

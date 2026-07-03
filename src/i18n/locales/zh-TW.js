@@ -5,6 +5,7 @@ export default {
   // ── Shared ──────────────────────────────────────────────────────────────
   "common.selectOne": "請選擇…",
   "common.optional": "（選填）",
+  "common.language": "語言",
 
   // ── Wedding page ────────────────────────────────────────────────────────
   "wedding.docTitle": "{bride} & {groom} · 婚禮",

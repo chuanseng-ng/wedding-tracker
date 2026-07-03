@@ -485,7 +485,8 @@ export default function WeddingPage() {
       <style>{styles}</style>
       <div className="wp" data-theme={pageTheme}>
 
-        <LanguageSwitcher style={{ position: "absolute", top: 16, right: 16, zIndex: 20 }} />
+        {/* Sit below the sticky preview banner (and above it in z-order) when unpublished. */}
+        <LanguageSwitcher style={{ position: "absolute", top: is_published ? 16 : 52, right: 16, zIndex: 201 }} />
 
         {pageTheme === "garden" && (
           <div className="wp-leaves-bg">
