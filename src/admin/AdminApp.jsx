@@ -3,7 +3,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { buildPayNowPayload, normalizeMobile } from "../paynow";
 import { sb, isDemoMode, supabase, HELPER_EMAIL } from "../lib/supabase.js";
 import { cleanName, cleanNotes, cleanTable, cleanParty, cleanAmount, MAX_ANGBAO } from "../lib/validation.js";
-import { parseCSV, toCSV } from "../lib/csv.js";
+import { parseCSV, toCSV, guestImportTemplateCSV } from "../lib/csv.js";
 import { formatTime } from "../lib/format.js";
 import { Icon } from "../shared/icons.jsx";
 import { theme } from "../shared/theme.js";
@@ -990,6 +990,9 @@ export default function WeddingTracker() {
         p_meal_options:   form.meal_options,
         p_getting_there:  form.getting_there,
         p_theme:          form.theme,
+        p_enable_fun_rsvp_options: form.enable_fun_rsvp_options,
+        p_smoking_notice: form.smoking_notice,
+        p_parking_notice: form.parking_notice,
       });
       await loadWedding();
       showToast("Wedding page saved");
@@ -1349,14 +1352,19 @@ export default function WeddingTracker() {
   });
 
   // Stats
-  const total = guests.length;
+  // Plus-ones (#38) are child guest rows; "invitation" stats count primaries,
+  // headcount counts every confirmed body.
+  const primaryGuests = guests.filter((g) => !g.primary_guest_id);
+  const total = primaryGuests.length;
   const arrived = guests.filter((g) => g.checked_in).length;
-  const angbaoTotal = guests.filter((g) => g.angbao_given).reduce((s, g) => s + (g.angbao_amount || 0), 0);
-  const angbaoCount = guests.filter((g) => g.angbao_given).length;
+  // Ang-bao is given per invitation, so scope to primaries (keeps "Still Pending"
+  // = total - angbaoCount non-negative and consistent with `total`).
+  const angbaoTotal = primaryGuests.filter((g) => g.angbao_given).reduce((s, g) => s + (g.angbao_amount || 0), 0);
+  const angbaoCount = primaryGuests.filter((g) => g.angbao_given).length;
   const pendingSubs = submissions.filter((s) => s.status === "pending").length;
-  const rsvpConfirmed = guests.filter((g) => g.rsvp_status === "confirmed").length;
-  const rsvpPending = guests.filter((g) => g.rsvp_status === "pending").length;
-  const rsvpHeadcount = rsvpConfirmed + guests.filter((g) => g.rsvp_status === "confirmed" && g.plus_one_name?.trim()).length;
+  const rsvpConfirmed = primaryGuests.filter((g) => g.rsvp_status === "confirmed").length;
+  const rsvpPending = primaryGuests.filter((g) => g.rsvp_status === "pending").length;
+  const rsvpHeadcount = guests.filter((g) => g.rsvp_status === "confirmed").length;
 
   // Table groups — only guests with an assignment; in d-day mode filtered already excludes non-confirmed
   const tables = {};
@@ -1472,11 +1480,11 @@ export default function WeddingTracker() {
             ) : (
               <>
                 <div className="stat-pill">
-                  <span className="num">{arrived}/{total}</span>
+                  <span className="num">{arrived}/{guests.length}</span>
                   <span className="lbl">Arrived</span>
                 </div>
                 <div className="stat-pill">
-                  <span className="num">{total > 0 ? Math.round((arrived / total) * 100) : 0}%</span>
+                  <span className="num">{guests.length > 0 ? Math.round((arrived / guests.length) * 100) : 0}%</span>
                   <span className="lbl">Attendance</span>
                 </div>
                 {ANGBAO_ENABLED && (
@@ -1890,7 +1898,16 @@ export default function WeddingTracker() {
                   />
                 </div>
                 <div style={{fontSize:"12px", color:"var(--brown)", opacity:0.6, lineHeight:1.5}}>
-                  Required column: <strong>name</strong>. Optional: <strong>table</strong> (or table_number), <strong>notes</strong>, <strong>vip</strong> (true/false)
+                  Required column: <strong>name</strong>. Optional: <strong>table</strong> (or table_number), <strong>notes</strong>, <strong>vip</strong> (true/false), <strong>party</strong> (bride/groom).
+                  {" "}Not sure of the format?{" "}
+                  <button
+                    type="button"
+                    className="btn btn-outline btn-sm"
+                    style={{marginTop:"6px"}}
+                    onClick={() => download(guestImportTemplateCSV(), "guest-import-template.csv", "text/csv")}
+                  >
+                    <Icon.Download /> Download template
+                  </button>
                 </div>
               </div>
               <div className="modal-actions">

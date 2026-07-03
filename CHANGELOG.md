@@ -5,6 +5,61 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [2026-07-03] — feat/38-plus-x-guests (#38)
+
+### Added
+
+- **RSVP form — bring up to 6 additional guests** — attending guests pick how many others they're bringing (0–6) and name each one. A disclaimer reminds them to inform the couple of the addition.
+- Each additional guest becomes its own **child guest row** (`guests.primary_guest_id`), so they're independently seatable and checkable-in. Revisiting an RSVP link repopulates the names; changing the list preserves the seats/check-ins of unchanged names (reconcile-by-name in `submit_rsvp`).
+
+### Changed
+
+- **Replaces the single `plus_one_name` field.** Existing values are migrated into child rows and the legacy field is cleared. The admin RSVP tab labels child rows ("↳ additional guest of …") and shows a "+N guests" tag on primaries; responder stats count primaries while **headcount counts every confirmed body**. Seating export drops the now-redundant `plus_one` column. Name search hides child rows (they don't self-RSVP).
+
+> Migration `0003_rsvp_seating.sql` was updated in place (idempotent): adds `primary_guest_id` + backfills existing plus-ones into child rows. Re-run it in the Supabase SQL editor.
+
+---
+
+## [2026-07-03] — feat/40-note-to-guests (#40)
+
+### Added
+
+- **RSVP form — "Would you like to give a speech?"** — a three-state (unanswered / Yes / No) question shown to attending guests. Stored on `guests.wants_to_speak`; the admin RSVP tab shows a 🎤 marker for volunteers and lets helpers edit the answer.
+- **RSVP form — Note to Guests notices** — couples can set optional **Parking** and **Smoking** notices under **Wedding Setup → Wedding Page → Note to Guests**; each appears on the RSVP form (when attending) only if filled. Stored on new `weddings.smoking_notice` / `weddings.parking_notice` columns.
+
+### Changed
+
+- `submit_rsvp` and `get_guest_by_rsvp_token` RPCs carry `wants_to_speak`; `get_wedding_config` / `upsert_wedding_page` carry the two notice fields.
+
+> Migrations `0003_rsvp_seating.sql` and `0004_weddings.sql` were updated in place (idempotent). Re-run both in the Supabase SQL editor.
+
+---
+
+## [2026-07-02] — feat/42-fun-rsvp-options (#42)
+
+### Added
+
+- **RSVP form — opt-in playful dropdown options** — couples can enable two lighthearted choices on the public RSVP form: "It's complicated 😅" under *How do you know the couple?* and "😏 It's a secret" under *Which kind of friend?*. Off by default; toggled from **Wedding Setup → Wedding Page** ("Fun RSVP options").
+- New `weddings.enable_fun_rsvp_options` boolean flag, threaded through `get_wedding_config` (read by the public RSVP page) and `upsert_wedding_page` (admin save).
+
+### Changed
+
+- `guests.relationship_group` / `friend_subgroup` CHECK constraints and the `submit_rsvp` / `submit_rsvp_by_name` RPC allow-lists now accept `complicated` / `secret`. The admin RSVP tab shows these options unconditionally so helpers can view/set stored values; the public form shows them only when the couple opts in.
+
+> Migrations `0003_rsvp_seating.sql` and `0004_weddings.sql` were updated in place (idempotent — `create or replace`, `add column if not exists`, and explicit `drop/add constraint`). Re-run both in the Supabase SQL editor.
+
+---
+
+## [2026-07-02] — feat/39-guest-import-template (#39)
+
+### Added
+
+- **Guest import — downloadable template** — the Import Guest List dialog now has a **Download template** button that saves a ready-to-fill `guest-import-template.csv` (the documented `name, table, notes, vip, party` columns plus two example rows), so users know the expected format before uploading. Built with the existing injection-safe `csvCell` helper; a Vitest round-trip test asserts the template always re-parses cleanly through `parseCSV`, keeping template and importer in sync.
+
+> Note: issue #39 requested an *xlsx* template, but the importer is CSV-only (no xlsx dependency). Delivered as a CSV template matching the actual importer rather than adding a heavyweight spreadsheet library.
+
+---
+
 ## [2026-07-01] — feat/52-editable-fun-questions (PR #54)
 
 ### Added

@@ -9,10 +9,15 @@ export const MAX_NAME = 120,
   MAX_VENUE_NAME = 200,
   MAX_VENUE_ADDRESS = 500;
 export const PARTIES = ["", "bride", "groom"];
-export const RELATIONSHIP_GROUPS = ["", "family", "colleagues", "friends", "other"];
+// "complicated" / "secret" are the opt-in playful RSVP options (#42); always
+// allowed server-side — the Wedding Setup toggle only gates their visibility on
+// the public form, not their validity.
+export const RELATIONSHIP_GROUPS = ["", "family", "colleagues", "friends", "other", "complicated"];
 export const FRIEND_SUBGROUPS = [
-  "", "army", "primary_school", "secondary_school", "tertiary", "university", "other",
+  "", "army", "primary_school", "secondary_school", "tertiary", "university", "other", "secret",
 ];
+// "Do you want to give a speech?" — three-state answer collected on the RSVP form (#40).
+export const SPEECH_OPTIONS = ["", "yes", "no"];
 
 export const cleanName = (v) => String(v ?? "").trim().slice(0, MAX_NAME);
 export const cleanNotes = (v) => String(v ?? "").trim().slice(0, MAX_NOTES);
@@ -28,6 +33,10 @@ export const cleanRelationshipGroup = (v) => {
 export const cleanFriendSubgroup = (v) => {
   const s = String(v ?? "").toLowerCase().trim();
   return FRIEND_SUBGROUPS.includes(s) ? s : "";
+};
+export const cleanSpeech = (v) => {
+  const s = String(v ?? "").toLowerCase().trim();
+  return SPEECH_OPTIONS.includes(s) ? s : "";
 };
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export const cleanEmail = (v) => {

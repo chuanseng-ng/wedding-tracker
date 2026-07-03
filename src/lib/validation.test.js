@@ -6,6 +6,9 @@ import {
   cleanParty,
   cleanAmount,
   cleanEmail,
+  cleanRelationshipGroup,
+  cleanFriendSubgroup,
+  cleanSpeech,
   MAX_NAME,
   MAX_NOTES,
   MAX_ANGBAO,
@@ -43,6 +46,48 @@ describe("cleanParty", () => {
     expect(cleanParty(" Bride ")).toBe("bride");
     expect(cleanParty("cousin")).toBe("");
     expect(cleanParty(null)).toBe("");
+  });
+});
+
+describe("cleanRelationshipGroup", () => {
+  it("accepts the standard groups plus the opt-in 'complicated' (#42)", () => {
+    expect(cleanRelationshipGroup("family")).toBe("family");
+    expect(cleanRelationshipGroup("Friends")).toBe("friends");
+    expect(cleanRelationshipGroup(" complicated ")).toBe("complicated");
+    expect(cleanRelationshipGroup("")).toBe("");
+  });
+
+  it("rejects unknown values", () => {
+    expect(cleanRelationshipGroup("nemesis")).toBe("");
+    expect(cleanRelationshipGroup(null)).toBe("");
+  });
+});
+
+describe("cleanFriendSubgroup", () => {
+  it("accepts the standard subgroups plus the opt-in 'secret' (#42)", () => {
+    expect(cleanFriendSubgroup("army")).toBe("army");
+    expect(cleanFriendSubgroup("University")).toBe("university");
+    expect(cleanFriendSubgroup(" secret ")).toBe("secret");
+    expect(cleanFriendSubgroup("")).toBe("");
+  });
+
+  it("rejects unknown values", () => {
+    expect(cleanFriendSubgroup("kindergarten")).toBe("");
+    expect(cleanFriendSubgroup(null)).toBe("");
+  });
+});
+
+describe("cleanSpeech", () => {
+  it("accepts the three states '', 'yes', 'no' (#40)", () => {
+    expect(cleanSpeech("yes")).toBe("yes");
+    expect(cleanSpeech(" No ")).toBe("no");
+    expect(cleanSpeech("")).toBe("");
+  });
+
+  it("rejects anything else", () => {
+    expect(cleanSpeech("maybe")).toBe("");
+    expect(cleanSpeech(null)).toBe("");
+    expect(cleanSpeech(true)).toBe("");
   });
 });
 

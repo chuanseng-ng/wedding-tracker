@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { sb, isDemoMode } from "../lib/supabase.js";
 import { theme } from "../shared/theme.js";
-import { cleanName, cleanNotes, cleanParty, cleanRelationshipGroup, cleanFriendSubgroup, cleanEmail } from "../lib/validation.js";
+import { cleanName, cleanNotes, cleanParty, cleanRelationshipGroup, cleanFriendSubgroup, cleanEmail, cleanSpeech } from "../lib/validation.js";
 
 const MEAL_OPTIONS = ["Halal", "Vegetarian", "Normal"];
 
@@ -21,6 +21,11 @@ const FRIEND_SUBGROUP_OPTIONS = [
   { value: "university", label: "University" },
   { value: "other", label: "Other" },
 ];
+
+// Opt-in playful options (#42) — appended only when the couple enables
+// `enable_fun_rsvp_options` in Wedding Setup.
+const FUN_RELATIONSHIP_OPTION = { value: "complicated", label: "It's complicated 😅" };
+const FUN_FRIEND_SUBGROUP_OPTION = { value: "secret", label: "😏 It's a secret" };
 
 
 const styles = theme + `
@@ -282,6 +287,8 @@ export default function RsvpPage() {
   const [dietary, setDietary]         = useState("");
   const [relationshipGroup, setRelationshipGroup] = useState("");
   const [friendSubgroup, setFriendSubgroup]        = useState("");
+  const [wantsToSpeak, setWantsToSpeak]            = useState("");
+  const [plusOneNames, setPlusOneNames]           = useState([]);
   const [closerTo, setCloserTo]                    = useState("");
   const [message, setMessage]         = useState("");
   const [error, setError]             = useState("");
@@ -297,6 +304,15 @@ export default function RsvpPage() {
 
   // activeToken: URL token takes precedence, then one selected from the name dropdown
   const activeToken = urlToken || selectedToken;
+
+  // Playful options are shown only when the couple opted in (#42).
+  const funOptions = !!wedding?.enable_fun_rsvp_options;
+  const relationshipOptions = funOptions
+    ? [...RELATIONSHIP_OPTIONS, FUN_RELATIONSHIP_OPTION]
+    : RELATIONSHIP_OPTIONS;
+  const friendSubgroupOptions = funOptions
+    ? [...FRIEND_SUBGROUP_OPTIONS, FUN_FRIEND_SUBGROUP_OPTION]
+    : FRIEND_SUBGROUP_OPTIONS;
 
   useEffect(() => {
     if (isDemoMode) return;
@@ -324,6 +340,8 @@ export default function RsvpPage() {
         setRelationshipGroup(g.relationship_group ?? "");
         setFriendSubgroup(g.friend_subgroup ?? "");
         setCloserTo(g.party ?? "");
+        setWantsToSpeak(g.wants_to_speak ?? "");
+        setPlusOneNames(Array.isArray(g.plus_one_names) ? g.plus_one_names : []);
         setMessage(g.rsvp_message ?? "");
       })
       .catch(() => {})
@@ -394,6 +412,10 @@ export default function RsvpPage() {
         p_friend_subgroup:    relationshipGroup === "friends" ? cleanFriendSubgroup(friendSubgroup) : "",
         p_party:              cleanParty(closerTo),
         p_email:              cleanEmail(email),
+        p_wants_to_speak:     attending ? cleanSpeech(wantsToSpeak) : "",
+        p_plus_one_names:     attending
+          ? plusOneNames.map((n) => cleanName(n)).filter(Boolean).slice(0, 6)
+          : [],
       });
       setDone(true);
     } catch (err) {
@@ -543,7 +565,7 @@ export default function RsvpPage() {
                   onChange={(e) => { setRelationshipGroup(e.target.value); setFriendSubgroup(""); }}
                 >
                   <option value="">Select one…</option>
-                  {RELATIONSHIP_OPTIONS.map((o) => (
+                  {relationshipOptions.map((o) => (
                     <option key={o.value} value={o.value}>{o.label}</option>
                   ))}
                 </select>
@@ -558,7 +580,7 @@ export default function RsvpPage() {
                     onChange={(e) => setFriendSubgroup(e.target.value)}
                   >
                     <option value="">Select one…</option>
-                    {FRIEND_SUBGROUP_OPTIONS.map((o) => (
+                    {friendSubgroupOptions.map((o) => (
                       <option key={o.value} value={o.value}>{o.label}</option>
                     ))}
                   </select>
@@ -609,6 +631,82 @@ export default function RsvpPage() {
                       onChange={(e) => setDietary(e.target.value)}
                     />
                   </div>
+
+                  {/* Do you want to give a speech? — three-state (unset toggles off) */}
+                  <div className="rsvp-field">
+                    <span className="rsvp-label">Would you like to give a speech?</span>
+                    <div className="attend-btns">
+                      <button type="button"
+                        className={`attend-btn yes ${wantsToSpeak === "yes" ? "active" : ""}`}
+                        onClick={() => setWantsToSpeak(wantsToSpeak === "yes" ? "" : "yes")}>
+                        🎤&nbsp; Yes, I'd love to
+                      </button>
+                      <button type="button"
+                        className={`attend-btn no ${wantsToSpeak === "no" ? "active" : ""}`}
+                        onClick={() => setWantsToSpeak(wantsToSpeak === "no" ? "" : "no")}>
+                        No, thanks
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Additional guests — plus-x, up to 6 (#38) */}
+                  <div className="rsvp-field">
+                    <label className="rsvp-label">Bringing additional guests?</label>
+                    <select
+                      className="rsvp-input"
+                      value={plusOneNames.length}
+                      onChange={(e) => {
+                        const n = Number(e.target.value);
+                        setPlusOneNames((prev) => {
+                          const next = prev.slice(0, n);
+                          while (next.length < n) next.push("");
+                          return next;
+                        });
+                      }}
+                    >
+                      {[0, 1, 2, 3, 4, 5, 6].map((n) => (
+                        <option key={n} value={n}>
+                          {n === 0 ? "Just me" : `${n} more guest${n > 1 ? "s" : ""}`}
+                        </option>
+                      ))}
+                    </select>
+                    {plusOneNames.map((nm, i) => (
+                      <input
+                        key={i}
+                        className="rsvp-input"
+                        style={{ marginTop: 8 }}
+                        placeholder={`Guest ${i + 1} full name`}
+                        value={nm}
+                        onChange={(e) =>
+                          setPlusOneNames((prev) => prev.map((x, j) => (j === i ? e.target.value : x)))
+                        }
+                      />
+                    ))}
+                    {plusOneNames.length > 0 && (
+                      <div style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, padding: "10px 12px", borderRadius: 10, background: "rgba(212,160,80,0.14)", color: "#7a5c1e" }}>
+                        ⚠️ Please inform the bride &amp; groom of this addition.
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Note to guests — display-only notices configured by the couple */}
+                  {(wedding?.parking_notice || wedding?.smoking_notice) && (
+                    <div className="rsvp-field">
+                      <span className="rsvp-label">Note to guests</span>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                        {wedding?.parking_notice && (
+                          <div style={{ fontSize: 14, lineHeight: 1.5, padding: "10px 12px", borderRadius: 10, background: "rgba(0,0,0,0.04)" }}>
+                            <strong>🅿️ Parking:</strong> {wedding.parking_notice}
+                          </div>
+                        )}
+                        {wedding?.smoking_notice && (
+                          <div style={{ fontSize: 14, lineHeight: 1.5, padding: "10px 12px", borderRadius: 10, background: "rgba(0,0,0,0.04)" }}>
+                            <strong>🚭 Smoking:</strong> {wedding.smoking_notice}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 

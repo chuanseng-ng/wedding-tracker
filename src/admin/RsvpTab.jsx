@@ -2,15 +2,18 @@ import { useState } from "react";
 
 const MEAL_OPTIONS = ["", "Halal", "Vegetarian", "Normal"];
 
+// Includes the opt-in playful options (#42) unconditionally so helpers can see
+// and set them regardless of the couple's public-form toggle.
 const RELATIONSHIP_OPTIONS = [
   ["", "Not set"], ["family", "Family"], ["colleagues", "Colleagues"],
-  ["friends", "Friends"], ["other", "Other"],
+  ["friends", "Friends"], ["other", "Other"], ["complicated", "It's complicated 😅"],
 ];
 const FRIEND_SUBGROUP_OPTIONS = [
   ["", "Not set"], ["army", "Army / NS"], ["primary_school", "Primary School"],
   ["secondary_school", "Secondary School"], ["tertiary", "JC / Poly"],
-  ["university", "University"], ["other", "Other"],
+  ["university", "University"], ["other", "Other"], ["secret", "😏 It's a secret"],
 ];
+const SPEECH_OPTIONS = [["", "Not set"], ["yes", "Yes"], ["no", "No"]];
 const PARTY_OPTIONS = [
   ["", "Not set"], ["bride", "Bride"], ["groom", "Groom"],
 ];
@@ -82,11 +85,20 @@ export default function RsvpTab({ guests, onUpdate, onDelete, showToast }) {
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({});
 
-  const confirmed = guests.filter((g) => g.rsvp_status === "confirmed");
-  const declined = guests.filter((g) => g.rsvp_status === "declined");
-  const pending = guests.filter((g) => g.rsvp_status === "pending");
-  const headcount =
-    confirmed.length + confirmed.filter((g) => g.plus_one_name?.trim()).length;
+  // Plus-ones (#38) are their own child guest rows. Responder stats count only
+  // primaries (the invitations); headcount counts every confirmed body.
+  const primaries = guests.filter((g) => !g.primary_guest_id);
+  const confirmed = primaries.filter((g) => g.rsvp_status === "confirmed");
+  const declined = primaries.filter((g) => g.rsvp_status === "declined");
+  const pending = primaries.filter((g) => g.rsvp_status === "pending");
+  const headcount = guests.filter((g) => g.rsvp_status === "confirmed").length;
+
+  // Look-ups for labelling child rows and showing a primary's party size.
+  const nameById = Object.fromEntries(guests.map((g) => [g.id, g.name]));
+  const childCount = guests.reduce((acc, g) => {
+    if (g.primary_guest_id) acc[g.primary_guest_id] = (acc[g.primary_guest_id] || 0) + 1;
+    return acc;
+  }, {});
 
   const mealCounts = confirmed.reduce((acc, g) => {
     const m = g.meal_choice?.trim() || "Not set";
@@ -104,12 +116,12 @@ export default function RsvpTab({ guests, onUpdate, onDelete, showToast }) {
     setEditForm({
       rsvp_status: g.rsvp_status || "pending",
       meal_choice: g.meal_choice || "",
-      plus_one_name: g.plus_one_name || "",
       dietary_notes: g.dietary_notes || "",
       relationship_group: g.relationship_group || "",
       friend_subgroup: g.friend_subgroup || "",
       party: g.party || "",
       email: g.email || "",
+      wants_to_speak: g.wants_to_speak || "",
     });
   };
 
@@ -117,12 +129,12 @@ export default function RsvpTab({ guests, onUpdate, onDelete, showToast }) {
     const patch = {
       rsvp_status: editForm.rsvp_status,
       meal_choice: editForm.meal_choice,
-      plus_one_name: editForm.plus_one_name,
       dietary_notes: editForm.dietary_notes,
       relationship_group: editForm.relationship_group,
       friend_subgroup: editForm.relationship_group === "friends" ? editForm.friend_subgroup : "",
       party: editForm.party,
       email: editForm.email.trim(),
+      wants_to_speak: editForm.wants_to_speak,
     };
     if (editForm.rsvp_status !== (g.rsvp_status || "pending")) {
       patch.rsvp_at = new Date().toISOString();
@@ -149,7 +161,7 @@ export default function RsvpTab({ guests, onUpdate, onDelete, showToast }) {
         {/* Stats */}
         <div className="rsvp-stats-grid">
           <div className="rsvp-stat-card">
-            <div className="rsvp-stat-big">{guests.length}</div>
+            <div className="rsvp-stat-big">{primaries.length}</div>
             <div className="rsvp-stat-label">Total Invited</div>
           </div>
           <div className="rsvp-stat-card">
@@ -174,8 +186,8 @@ export default function RsvpTab({ guests, onUpdate, onDelete, showToast }) {
             <div className="rsvp-stat-big">{pending.length}</div>
             <div className="rsvp-stat-label">Awaiting Reply</div>
             <div className="rsvp-stat-sub">
-              {guests.length > 0
-                ? Math.round(((guests.length - pending.length) / guests.length) * 100)
+              {primaries.length > 0
+                ? Math.round(((primaries.length - pending.length) / primaries.length) * 100)
                 : 0}
               % responded
             </div>
@@ -225,19 +237,22 @@ export default function RsvpTab({ guests, onUpdate, onDelete, showToast }) {
                   <div className="rsvp-name-col">
                     <div className="rsvp-guest-name">{g.name}</div>
                     <div className="rsvp-guest-meta">
-                      {[
-                        g.party ? `${g.party} side` : null,
-                        g.relationship_group
-                          ? (g.relationship_group === "friends" && g.friend_subgroup
-                              ? `friend (${g.friend_subgroup.replace(/_/g, " ")})`
-                              : g.relationship_group)
-                          : null,
-                        g.plus_one_name?.trim() ? `+1: ${g.plus_one_name}` : null,
-                        g.dietary_notes?.trim() || null,
-                        g.email?.trim() || null,
-                      ]
-                        .filter(Boolean)
-                        .join(" · ")}
+                      {g.primary_guest_id
+                        ? `↳ additional guest of ${nameById[g.primary_guest_id] || "a guest"}`
+                        : [
+                            g.party ? `${g.party} side` : null,
+                            g.relationship_group
+                              ? (g.relationship_group === "friends" && g.friend_subgroup
+                                  ? `friend (${g.friend_subgroup.replace(/_/g, " ")})`
+                                  : g.relationship_group)
+                              : null,
+                            childCount[g.id] ? `+${childCount[g.id]} guest${childCount[g.id] > 1 ? "s" : ""}` : null,
+                            g.wants_to_speak === "yes" ? "🎤 speech" : null,
+                            g.dietary_notes?.trim() || null,
+                            g.email?.trim() || null,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")}
                     </div>
                   </div>
                   <span
@@ -320,17 +335,6 @@ export default function RsvpTab({ guests, onUpdate, onDelete, showToast }) {
                       />
                     </div>
                     <div className="rsvp-edit-group">
-                      <label className="rsvp-edit-label">Plus One Name</label>
-                      <input
-                        className="rsvp-edit-input"
-                        value={editForm.plus_one_name}
-                        onChange={(e) =>
-                          setEditForm({ ...editForm, plus_one_name: e.target.value })
-                        }
-                        placeholder="Guest name…"
-                      />
-                    </div>
-                    <div className="rsvp-edit-group">
                       <label className="rsvp-edit-label">Dietary Notes</label>
                       <input
                         className="rsvp-edit-input"
@@ -385,6 +389,20 @@ export default function RsvpTab({ guests, onUpdate, onDelete, showToast }) {
                         </select>
                       </div>
                     )}
+                    <div className="rsvp-edit-group">
+                      <label className="rsvp-edit-label">Wants to speak?</label>
+                      <select
+                        className="rsvp-edit-select"
+                        value={editForm.wants_to_speak}
+                        onChange={(e) =>
+                          setEditForm({ ...editForm, wants_to_speak: e.target.value })
+                        }
+                      >
+                        {SPEECH_OPTIONS.map(([v, l]) => (
+                          <option key={v} value={v}>{l}</option>
+                        ))}
+                      </select>
+                    </div>
                     <div className="rsvp-edit-footer">
                       <button
                         className="rsvp-btn rsvp-btn-cancel"
