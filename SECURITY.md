@@ -84,7 +84,10 @@ This project is configured so that:
   requires a valid Supabase access token **and** that the token's email matches
   the configured helper (`HELPER_EMAIL` / `VITE_HELPER_EMAIL`) — verified
   server-side via the service-role key — so a stranger who self-registers can't
-  spend the couple's vision-API budget. It fails closed, applies a best-effort
+  spend the couple's vision-API budget. **Set `HELPER_EMAIL` (or `VITE_HELPER_EMAIL`)
+  for this endpoint: if neither is configured it falls back to accepting *any*
+  authenticated user, so disabling public sign-ups (step 2) alone is not enough
+  to lock it down.** It fails closed, applies a best-effort
   per-helper rate limit, and never fetches an attacker-supplied URL (the image
   is passed to the model as inline base64, so there is no SSRF surface). The
   model's reply is constrained to a hex-color-only palette, sanitized on the
