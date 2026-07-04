@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { isAllowedHelperEmail } from "./generate-theme.js";
+import { isAllowedHelperEmail, resolveThemeModel } from "./generate-theme.js";
 
 const SNAPSHOT = { ...process.env };
 afterEach(() => {
@@ -32,5 +32,33 @@ describe("isAllowedHelperEmail", () => {
     process.env.VITE_HELPER_EMAIL = "h@w.com";
     expect(isAllowedHelperEmail("")).toBe(false);
     expect(isAllowedHelperEmail(null)).toBe(false);
+  });
+});
+
+describe("resolveThemeModel (#66)", () => {
+  it("prefers NVIDIA_MODEL for the nvidia provider", () => {
+    process.env.NVIDIA_MODEL = "meta/llama-3.3-70b-instruct";
+    process.env.THEME_AI_MODEL = "shared-model";
+    expect(resolveThemeModel("nvidia")).toBe("meta/llama-3.3-70b-instruct");
+  });
+
+  it("falls back to THEME_AI_MODEL for nvidia when NVIDIA_MODEL is unset", () => {
+    delete process.env.NVIDIA_MODEL;
+    process.env.THEME_AI_MODEL = "shared-model";
+    expect(resolveThemeModel("nvidia")).toBe("shared-model");
+  });
+
+  it("ignores NVIDIA_MODEL for non-nvidia providers", () => {
+    process.env.NVIDIA_MODEL = "nv-only";
+    process.env.THEME_AI_MODEL = "shared-model";
+    expect(resolveThemeModel("openai")).toBe("shared-model");
+    expect(resolveThemeModel("anthropic")).toBe("shared-model");
+  });
+
+  it("returns undefined (provider default) when nothing is configured", () => {
+    delete process.env.NVIDIA_MODEL;
+    delete process.env.THEME_AI_MODEL;
+    expect(resolveThemeModel("nvidia")).toBeUndefined();
+    expect(resolveThemeModel("anthropic")).toBeUndefined();
   });
 });

@@ -127,16 +127,21 @@ export async function generateThemeTokens({
   if (!ENDPOINTS[provider]) throw new Error(`unknown theme provider: ${provider}`);
   if (!apiKey) throw new Error("missing api key");
 
+  const resolvedModel = model || DEFAULT_MODELS[provider];
   const { url, init } = buildRequest({
     provider,
-    model: model || DEFAULT_MODELS[provider],
+    model: resolvedModel,
     apiKey,
     imageBase64,
     mimeType,
   });
 
   const resp = await withTimeout(fetchImpl, url, init);
-  if (!resp.ok) throw new Error(`theme provider ${provider} responded ${resp.status}`);
+  // Name the model in the error: a 401/403 from NVIDIA is often model-entitlement,
+  // not a bad key, so the resolved model is the key clue for #68 diagnosis.
+  if (!resp.ok) {
+    throw new Error(`theme provider ${provider} (${resolvedModel}) responded ${resp.status}`);
+  }
   const data = await resp.json();
 
   const tokens = sanitizeThemeTokens(extractJson(extractText(provider, data)));

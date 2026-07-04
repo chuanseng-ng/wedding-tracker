@@ -34,6 +34,15 @@ function providerKey(provider) {
   }[provider];
 }
 
+// Resolve which model to request. NVIDIA NIM hosts many models and won't route a
+// request without a valid `model`; a couple can pin it with NVIDIA_MODEL (#66)
+// without a code change. THEME_AI_MODEL stays the provider-agnostic override, and
+// an unset value falls through to the provider's built-in default.
+export function resolveThemeModel(provider) {
+  if (provider === "nvidia" && process.env.NVIDIA_MODEL) return process.env.NVIDIA_MODEL;
+  return process.env.THEME_AI_MODEL || undefined;
+}
+
 // The endpoint spends real API budget per call, so require not just a valid
 // Supabase JWT but that it belongs to the configured helper account. If no helper
 // email is configured, fall back to "any authenticated user" (back-compat).
@@ -91,7 +100,7 @@ export default async function handler(req, res) {
       mimeType,
       provider,
       apiKey,
-      model: process.env.THEME_AI_MODEL || undefined,
+      model: resolveThemeModel(provider),
     });
     return res.status(200).json({ tokens });
   } catch (err) {
