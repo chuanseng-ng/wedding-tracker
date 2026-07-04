@@ -78,6 +78,26 @@ describe("generateThemeTokens", () => {
     ).rejects.toThrow();
   });
 
+  it("sends the requested model in the request body (#66)", async () => {
+    const fetchImpl = openaiFetch(jsonText);
+    await generateThemeTokens({ ...img, provider: "nvidia", apiKey: "k", model: "meta/custom-model", fetchImpl });
+    expect(JSON.parse(fetchImpl.mock.calls[0][1].body).model).toBe("meta/custom-model");
+  });
+
+  it("names the provider, model, and status in an upstream error (diagnosing 401s)", async () => {
+    const fetchImpl = vi.fn(async () => ({ ok: false, status: 401, json: async () => ({}) }));
+    const err = await generateThemeTokens({
+      ...img,
+      provider: "nvidia",
+      apiKey: "k",
+      model: "meta/custom-model",
+      fetchImpl,
+    }).catch((e) => e);
+    expect(err.message).toContain("nvidia");
+    expect(err.message).toContain("meta/custom-model");
+    expect(err.message).toContain("401");
+  });
+
   it("throws on an unknown provider or missing inputs", async () => {
     const fetchImpl = openaiFetch(jsonText);
     await expect(generateThemeTokens({ ...img, provider: "bogus", apiKey: "k", fetchImpl })).rejects.toThrow();
