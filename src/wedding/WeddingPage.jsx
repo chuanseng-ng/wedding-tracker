@@ -503,8 +503,8 @@ export default function WeddingPage() {
     return (
       <section className="wp-section wp-gallery">
         <div className="wp-gallery-grid" style={{ gridTemplateColumns: `repeat(${g.cols}, 1fr)` }}>
-          {g.photos.map((src, i) => (
-            <img key={i} className="wp-gallery-img" src={src} alt="" loading="lazy" />
+          {g.photos.map((src) => (
+            <img key={src} className="wp-gallery-img" src={src} alt="" loading="lazy" />
           ))}
         </div>
       </section>

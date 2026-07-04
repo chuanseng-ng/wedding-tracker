@@ -545,10 +545,13 @@ export default function WeddingPageTab({ wedding, onSave, showToast }) {
       return;
     }
     setGalleryUploading(key);
-    try {
-      const uploaded = [];
-      for (const file of files.slice(0, room)) {
-        if (!file.type.startsWith("image/")) continue;
+    // Upload each file independently so a mid-batch failure keeps (and persists)
+    // the successes rather than orphaning already-uploaded objects in the bucket.
+    const uploaded = [];
+    let failed = 0;
+    for (const file of files.slice(0, room)) {
+      if (!file.type.startsWith("image/")) continue;
+      try {
         const ext = file.name.split(".").pop().toLowerCase();
         const rand = Math.random().toString(36).slice(2, 8);
         const path = `gallery/${key}/${existing + uploaded.length}-${rand}.${ext}`;
@@ -558,24 +561,25 @@ export default function WeddingPageTab({ wedding, onSave, showToast }) {
         if (uploadError) throw uploadError;
         const { data } = supabase.storage.from("wedding-photos").getPublicUrl(path);
         uploaded.push(data.publicUrl);
+      } catch (err) {
+        failed += 1;
+        console.error("[WeddingPageTab] gallery upload error:", err);
       }
-      if (uploaded.length) {
-        setSectionPhotos((prev) => ({
-          ...prev,
-          [key]: {
-            ...prev[key],
-            photos: [...prev[key].photos, ...uploaded].slice(0, MAX_PHOTOS_PER_SLOT),
-          },
-        }));
-        showToast(`${uploaded.length} photo${uploaded.length > 1 ? "s" : ""} uploaded!`);
-      }
-    } catch (err) {
-      console.error("[WeddingPageTab] gallery upload error:", err);
-      showToast(`Upload failed: ${err?.message || err?.error || JSON.stringify(err)}`);
-    } finally {
-      setGalleryUploading("");
-      if (galleryInputs.current[key]) galleryInputs.current[key].value = "";
     }
+    if (uploaded.length) {
+      setSectionPhotos((prev) => ({
+        ...prev,
+        [key]: {
+          ...prev[key],
+          photos: [...prev[key].photos, ...uploaded].slice(0, MAX_PHOTOS_PER_SLOT),
+        },
+      }));
+    }
+    if (failed && uploaded.length) showToast(`${uploaded.length} uploaded, ${failed} failed`);
+    else if (failed) showToast(`${failed} photo${failed > 1 ? "s" : ""} failed to upload`);
+    else if (uploaded.length) showToast(`${uploaded.length} photo${uploaded.length > 1 ? "s" : ""} uploaded!`);
+    setGalleryUploading("");
+    if (galleryInputs.current[key]) galleryInputs.current[key].value = "";
   };
 
   const removeGalleryPhoto = (key, idx) =>
@@ -752,7 +756,7 @@ export default function WeddingPageTab({ wedding, onSave, showToast }) {
                     {g.photos.length > 0 && (
                       <div className="wpt-gallery-thumbs">
                         {g.photos.map((src, i) => (
-                          <div key={i} className="wpt-gallery-thumb">
+                          <div key={src} className="wpt-gallery-thumb">
                             <img src={src} alt="" />
                             <button
                               type="button"

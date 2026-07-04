@@ -8,6 +8,22 @@
 alter table public.weddings
   add column if not exists section_photos jsonb not null default '{}'::jsonb;
 
+-- Server-side size guard: upsert_wedding_page is granted to anon, so a caller can
+-- bypass the client-side caps in normalizeSectionPhotos() (12 photos/slot, cols
+-- 1–4). Bound the stored payload so a malformed/oversized blob can't be persisted
+-- and then served on every public page load. (Postgres has no `add constraint if
+-- not exists`, so guard on pg_constraint for idempotency.)
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'weddings_section_photos_size'
+  ) then
+    alter table public.weddings
+      add constraint weddings_section_photos_size
+      check (pg_column_size(section_photos) < 200000);
+  end if;
+end $$;
+
 -- ── 2. RPCs (recreate with section_photos) ────────────────────────────────────
 
 -- 2a. Admin read.
