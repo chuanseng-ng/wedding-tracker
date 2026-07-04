@@ -118,4 +118,44 @@ describe("translateItems", () => {
     expect(init.headers.Authorization).toBe("DeepL-Auth-Key secret-key");
     expect(new URLSearchParams(init.body).get("target_lang")).toBe("KO");
   });
+
+  it("splits long text for MyMemory so no single request exceeds its byte cap", async () => {
+    const long = "word ".repeat(200).trim(); // ~1000 bytes, over MyMemory's ~500-byte q limit
+    const fetchImpl = fakeFetch();
+    // ms → MyMemory path (DeepL unsupported), even with a key present.
+    const results = await translateItems([{ key: "love_story", text: long }], {
+      target: "ms",
+      deeplKey: "key",
+      fetchImpl,
+    });
+    expect(fetchImpl.mock.calls.length).toBeGreaterThan(1);
+    for (const call of fetchImpl.mock.calls) {
+      const q = new URL(String(call[0])).searchParams.get("q");
+      expect(new TextEncoder().encode(q).length).toBeLessThanOrEqual(500);
+    }
+    // The per-chunk translations are stitched back into one non-empty result.
+    expect(results[0].text).toContain("MM:");
+  });
+
+  it("aborts a hung upstream and returns blank rather than blocking", async () => {
+    vi.useFakeTimers();
+    try {
+      const hangingFetch = vi.fn(
+        (_url, init) =>
+          new Promise((_resolve, reject) => {
+            init?.signal?.addEventListener("abort", () => reject(new Error("aborted")));
+          }),
+      );
+      const p = translateItems([{ key: "k", text: "hello" }], {
+        target: "ms",
+        deeplKey: "",
+        fetchImpl: hangingFetch,
+      });
+      await vi.advanceTimersByTimeAsync(15000);
+      const results = await p;
+      expect(results[0].text).toBe("");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

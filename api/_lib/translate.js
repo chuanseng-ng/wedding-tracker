@@ -8,6 +8,8 @@ export const MAX_TEXT = 2000;
 const MYMEMORY_URL = "https://api.mymemory.translated.net/get";
 const DEEPL_URL = "https://api-free.deepl.com/v2/translate";
 const DEEPL_BATCH = 50; // DeepL accepts up to 50 `text` params per request.
+const FETCH_TIMEOUT_MS = 8000; // Abort a stalled upstream instead of blocking.
+const MYMEMORY_MAX_BYTES = 450; // MyMemory caps a single `q` at ~500 bytes.
 
 // Our app locale codes → DeepL target_lang codes. Absence ⇒ DeepL unsupported.
 const DEEPL_TARGET = {
@@ -33,6 +35,42 @@ function chunk(arr, size) {
   return out;
 }
 
+function byteLen(s) {
+  return new TextEncoder().encode(s).length;
+}
+
+// Race a fetch against a timeout so a hung upstream fails fast (and, for the
+// DeepL→MyMemory chain, falls back) instead of blocking until the platform
+// function timeout.
+async function withTimeout(fetchImpl, url, init) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  try {
+    return await fetchImpl(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Break text into segments within MyMemory's per-request byte cap, preferring
+// word boundaries so the stitched-back translation stays readable. Without this,
+// a field over ~500 bytes comes back blank on the MyMemory fallback path.
+function splitForMyMemory(text) {
+  if (byteLen(text) <= MYMEMORY_MAX_BYTES) return [text];
+  const chunks = [];
+  let cur = "";
+  for (const word of text.split(/(\s+)/)) {
+    if (cur && byteLen(cur + word) > MYMEMORY_MAX_BYTES) {
+      chunks.push(cur);
+      cur = word.trimStart();
+    } else {
+      cur += word;
+    }
+  }
+  if (cur.trim()) chunks.push(cur);
+  return chunks;
+}
+
 async function deeplBatch(texts, source, target, key, fetchImpl) {
   const body = new URLSearchParams();
   for (const t of texts) body.append("text", t);
@@ -40,7 +78,7 @@ async function deeplBatch(texts, source, target, key, fetchImpl) {
   const src = DEEPL_SOURCE[source];
   if (src) body.set("source_lang", src);
 
-  const resp = await fetchImpl(DEEPL_URL, {
+  const resp = await withTimeout(fetchImpl, DEEPL_URL, {
     method: "POST",
     headers: {
       Authorization: `DeepL-Auth-Key ${key}`,
@@ -60,12 +98,23 @@ async function deeplBatch(texts, source, target, key, fetchImpl) {
 async function mymemoryOne(text, source, target, email, fetchImpl) {
   const params = new URLSearchParams({ q: text, langpair: `${source}|${target}` });
   if (email) params.set("de", email);
-  const resp = await fetchImpl(`${MYMEMORY_URL}?${params.toString()}`);
+  const resp = await withTimeout(fetchImpl, `${MYMEMORY_URL}?${params.toString()}`, {});
   if (!resp.ok) throw new Error(`mymemory upstream ${resp.status}`);
   const data = await resp.json();
   const out = data?.responseData?.translatedText;
   if (typeof out !== "string" || !out.trim()) throw new Error("no translation");
   return out;
+}
+
+// Translate one field via MyMemory, chunking long text to respect its q cap and
+// stitching the per-chunk translations back together.
+async function mymemoryTranslate(text, source, target, email, fetchImpl) {
+  const parts = splitForMyMemory(text);
+  const out = [];
+  for (const part of parts) {
+    out.push(await mymemoryOne(part, source, target, email, fetchImpl));
+  }
+  return out.join(" ");
 }
 
 export async function translateItems(items, opts = {}) {
@@ -109,7 +158,7 @@ export async function translateItems(items, opts = {}) {
   for (const g of todo) {
     if (results[g.i].text) continue;
     try {
-      results[g.i] = { key: g.key, text: await mymemoryOne(g.text, source, target, mymemoryEmail, fetchImpl) };
+      results[g.i] = { key: g.key, text: await mymemoryTranslate(g.text, source, target, mymemoryEmail, fetchImpl) };
     } catch {
       // Graceful: leave blank so the couple fills it in manually rather than erroring.
     }
