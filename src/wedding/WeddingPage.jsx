@@ -8,6 +8,16 @@ import { sanitizeThemeTokens, isCompleteThemeTokens, themeTokenStyle } from "../
 import { normalizeSectionPhotos } from "../lib/sectionPhotos.js";
 import LanguageSwitcher from "../i18n/LanguageSwitcher.jsx";
 
+// Returns the meal type key based on HH:MM time string (24h).
+// Brunch: 09:00–10:59 · Lunch: 11:00–16:59 · Dinner: everything else.
+function getMealType(time) {
+  if (!time) return "dinner";
+  const [h] = time.split(":").map(Number);
+  if (h >= 9 && h <= 10) return "brunch";
+  if (h >= 11 && h <= 16) return "lunch";
+  return "dinner";
+}
+
 // Maps a fun-fact id to the i18n key for its fallback question (used only when
 // the couple didn't supply their own question text).
 const FUN_QUESTION_KEYS = {
@@ -673,7 +683,7 @@ export default function WeddingPage() {
                 <div className="wp-tl-item">
                   <div className="wp-tl-node"><div className="wp-tl-icon">🍽</div><div className="wp-tl-connector" /></div>
                   <div className="wp-tl-body">
-                    <div className="wp-tl-label">{t("wedding.timeline.dinner")}</div>
+                    <div className="wp-tl-label">{t(`wedding.timeline.${getMealType(dinner_time)}`)}</div>
                     <div className="wp-tl-value">{fmt12h(dinner_time)}</div>
                   </div>
                 </div>
