@@ -291,6 +291,7 @@ const styles = theme + `
     .wp-hero {
       background-size: contain !important;
       background-position: top center !important;
+      background-repeat: no-repeat !important;
       min-height: 100svh;
     }
   }
