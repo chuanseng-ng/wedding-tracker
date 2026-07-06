@@ -264,6 +264,15 @@ const styles = theme + `
   }
   .wp-cta-btn:hover { background: var(--gold-dark); transform: translateY(-1px); }
 
+  /* ── LOADING ── */
+  .wp-loading {
+    min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    background: var(--cream);
+  }
+  @keyframes wp-pulse { 0%,100% { opacity: 0.3; } 50% { opacity: 1; } }
+  .wp-loading-icon { font-size: 36px; animation: wp-pulse 1.6s ease-in-out infinite; }
+  @media (prefers-reduced-motion: reduce) { .wp-loading-icon { animation: none; opacity: 0.6; } }
+
   /* ── NOT FOUND ── */
   .wp-notfound {
     min-height: 100vh; display: flex; flex-direction: column;
@@ -487,8 +496,8 @@ export default function WeddingPage() {
     return (
       <>
         <style>{styles}</style>
-        <div className="wp-notfound">
-          <div style={{ fontSize: 32 }}>✦</div>
+        <div className="wp-loading" aria-live="polite" aria-label="Loading wedding page">
+          <div className="wp-loading-icon">✦</div>
         </div>
       </>
     );

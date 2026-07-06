@@ -418,7 +418,7 @@ export default function RsvpPage() {
     }
     if (isDemoMode && !name.trim()) { setError(t("rsvp.err.nameEnter")); return; }
     if (attending === null) { setError(t("rsvp.err.attendingSelect")); return; }
-    if (!cleanEmail(email)) { setError(t("rsvp.err.emailInvalid")); return; }
+    if (attending && !cleanEmail(email)) { setError(t("rsvp.err.emailInvalid")); return; }
     setError("");
     setSubmitting(true);
 
@@ -454,7 +454,7 @@ export default function RsvpPage() {
       } else if (msg.includes("invalid rsvp token")) {
         setError(t("rsvp.err.linkExpired"));
       } else {
-        setError(t("rsvp.err.generic", { msg: err?.message ?? "unknown error" }));
+        setError(t("rsvp.err.generic"));
       }
     } finally {
       setSubmitting(false);

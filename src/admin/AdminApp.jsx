@@ -808,8 +808,11 @@ export default function WeddingTracker() {
   const [accessCode, setAccessCode] = useState("");
   const [pinError, setPinError] = useState("");
   const [unlocking, setUnlocking] = useState(false);
+  const [pinFailCount, setPinFailCount] = useState(0);
+  const [pinLocked, setPinLocked] = useState(false);
   const [guests, setGuests] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [guestLoadError, setGuestLoadError] = useState(false);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [mode, setMode] = useState("planning"); // "planning" | "dday"
@@ -870,7 +873,19 @@ export default function WeddingTracker() {
     });
     setUnlocking(false);
     if (error) {
-      setPinError("Incorrect access code, try again");
+      const newCount = pinFailCount + 1;
+      setPinFailCount(newCount);
+      const isRateLimited =
+        error.message?.toLowerCase().includes("too many") ||
+        error.message?.toLowerCase().includes("rate") ||
+        newCount >= 3;
+      if (isRateLimited) {
+        setPinError("Too many attempts — wait 60 seconds before trying again");
+        setPinLocked(true);
+        setTimeout(() => { setPinLocked(false); setPinFailCount(0); setPinError(""); }, 60_000);
+      } else {
+        setPinError("Incorrect access code, try again");
+      }
       setAccessCode("");
     } else {
       setUnlocked(true);
@@ -913,8 +928,10 @@ export default function WeddingTracker() {
               : row
           )
         );
+        setGuestLoadError(false);
       }
     } catch {
+      setGuestLoadError(true);
       showToast("Failed to load guests");
     }
     setLoading(false);
@@ -1421,7 +1438,7 @@ export default function WeddingTracker() {
               placeholder="Access code"
               autoComplete="current-password"
             />
-            <button type="submit" className="pin-unlock" disabled={unlocking || !accessCode}>
+            <button type="submit" className="pin-unlock" disabled={unlocking || !accessCode || pinLocked}>
               {unlocking ? "Checking…" : "Unlock"}
             </button>
             <div className="pin-error">{pinError}</div>
@@ -1567,12 +1584,16 @@ export default function WeddingTracker() {
               </div>
             </>
           )}
-          <button className="btn btn-outline" onClick={() => { setModal("upload"); }}>
-            <Icon.Upload /> Import CSV
-          </button>
-          <button className="btn btn-gold" onClick={() => { setEditGuest(null); setForm({ name: "", table_number: "", notes: "", party: "", is_vip: false }); setModal("add"); }}>
-            <Icon.Plus /> Add Guest
-          </button>
+          {((mode === "planning" && view === "rsvp") || (mode === "dday" && view === "guests")) && (
+            <>
+              <button className="btn btn-outline" onClick={() => { setModal("upload"); }}>
+                <Icon.Upload /> Import CSV
+              </button>
+              <button className="btn btn-gold" onClick={() => { setEditGuest(null); setForm({ name: "", table_number: "", notes: "", party: "", is_vip: false }); setModal("add"); }}>
+                <Icon.Plus /> Add Guest
+              </button>
+            </>
+          )}
           {mode === "dday" && (
             <>
               <button className="btn btn-outline btn-sm" onClick={exportCSV} title="Export CSV"><Icon.Download /></button>
@@ -1599,6 +1620,12 @@ export default function WeddingTracker() {
 
           {loading ? (
             <div className="empty"><div className="empty-icon">⏳</div><div className="empty-text">Loading guests…</div></div>
+          ) : guestLoadError && guests.length === 0 ? (
+            <div className="empty">
+              <div className="empty-icon">⚠️</div>
+              <div className="empty-text">Could not load guests</div>
+              <div className="empty-sub">Check your connection, then <button className="btn btn-outline btn-sm" style={{ marginLeft: 8 }} onClick={loadGuests}>Retry</button></div>
+            </div>
           ) : view === "guests" ? (
             <div className="guest-grid">
               {filtered.length === 0 ? (
