@@ -4,6 +4,8 @@ import { sb, isDemoMode } from "../lib/supabase.js";
 import { theme } from "../shared/theme.js";
 import { useLocale } from "../i18n/index.jsx";
 import { localizeWedding } from "../i18n/content.js";
+import { localizeEvents } from "../lib/eventLocalize.js";
+import { eventTimelineIcon } from "../lib/eventTimelineIcon.js";
 import { sanitizeThemeTokens, isCompleteThemeTokens, themeTokenStyle } from "../lib/themeTokens.js";
 import { normalizeSectionPhotos } from "../lib/sectionPhotos.js";
 import { normalizeFocalPoint } from "../lib/heroFocalPoint.js";
@@ -56,7 +58,16 @@ const DEMO_WEDDING = {
   meal_options: "Chicken,Fish,Vegetarian",
   getting_there: "By MRT: Alight at Orchard MRT (NS22 / TE14), take Exit B and walk 5 minutes along Orchard Road.\n\nBy car: Parking available at the hotel basement. Enter via Orchard Road. First 2 hours complimentary for wedding guests.\n\nDrop-off: Use the main hotel entrance on Orchard Road — our wedding team will be there to welcome you.",
   section_photos: {},
+  enable_smart_rsvp: true,
 };
+
+// Smart-RSVP event list for the demo page (#78). On a real deployment this comes
+// from get_public_events; here it showcases the data-driven timeline.
+const DEMO_EVENTS = [
+  { id: "d1", name: "Tea Ceremony",   event_date: null, start_time: "10:00", location: "Family home",         requires_meal: false, requires_headcount: true, sort_order: 0, content_translations: {} },
+  { id: "d2", name: "Solemnisation",  event_date: null, start_time: "14:00", location: "City Hall Chapel",    requires_meal: false, requires_headcount: true, sort_order: 1, content_translations: {} },
+  { id: "d3", name: "Wedding Banquet", event_date: null, start_time: "19:00", location: "The Grand Ballroom", requires_meal: true,  requires_headcount: true, sort_order: 2, content_translations: {} },
+];
 
 const styles = theme + `
   .wp { min-height: 100vh; position: relative; }
@@ -432,6 +443,7 @@ export default function WeddingPage() {
   const token = searchParams.get("token");
 
   const [wedding, setWedding] = useState(null);
+  const [events, setEvents]    = useState([]); // smart-RSVP event list (#78)
   const [loading, setLoading]  = useState(true);
   // Couple content in the active language (per-field fallback to English) — #53 Phase 2.
   const lw = localizeWedding(wedding, locale);
@@ -440,7 +452,7 @@ export default function WeddingPage() {
     if (isDemoMode) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setWedding(DEMO_WEDDING);
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setEvents(DEMO_EVENTS);
       setLoading(false);
       return;
     }
@@ -450,6 +462,10 @@ export default function WeddingPage() {
       })
       .catch(() => setWedding(null))
       .finally(() => setLoading(false));
+    // Smart-RSVP events (server returns [] unless enable_smart_rsvp is on).
+    sb.rpc("get_public_events", { p_slug: slug })
+      .then((rows) => setEvents(Array.isArray(rows) ? rows : []))
+      .catch(() => setEvents([]));
   }, [slug]);
 
   useEffect(() => {
@@ -511,6 +527,12 @@ export default function WeddingPage() {
           ceremony_time, dinner_time, tea_ceremony_time, love_story, dress_code,
           hero_image_url, rsvp_deadline, is_published, getting_there,
           theme: pageTheme = "minimal", theme_tokens } = lw;
+
+  // Smart-RSVP timeline (#78): when enabled and events exist, render the couple's
+  // event list (localized) instead of the three hardcoded slots. Falls back to the
+  // legacy tea/solemnisation/meal slots otherwise.
+  const smartEvents = wedding.enable_smart_rsvp ? localizeEvents(events, locale) : [];
+  const useSmartTimeline = smartEvents.length > 0;
 
   // Hero focal point (#75). Layout preset, not translatable — read straight off
   // the wedding record and whitelist it before it reaches background-position.
@@ -669,34 +691,53 @@ export default function WeddingPage() {
             <div className="wp-section-eyebrow">{t("wedding.bigday.eyebrow")}</div>
             <div className="wp-section-title">{t("wedding.bigday.title")}</div>
             <div className="wp-timeline">
-              {tea_ceremony_time && (
-                <div className="wp-tl-item">
-                  <div className="wp-tl-node"><div className="wp-tl-icon">🍵</div><div className="wp-tl-connector" /></div>
-                  <div className="wp-tl-body">
-                    <div className="wp-tl-label">{t("wedding.timeline.tea")}</div>
-                    <div className="wp-tl-value">{fmt12h(tea_ceremony_time)}</div>
-                    {wedding_date && <div className="wp-tl-sub">{formatLongDate(wedding_date)}</div>}
+              {useSmartTimeline ? (
+                smartEvents.map((ev) => (
+                  <div key={ev.id} className="wp-tl-item">
+                    <div className="wp-tl-node"><div className="wp-tl-icon">{eventTimelineIcon(ev.name)}</div><div className="wp-tl-connector" /></div>
+                    <div className="wp-tl-body">
+                      <div className="wp-tl-label">{ev.name}</div>
+                      {ev.start_time && <div className="wp-tl-value">{fmt12h(ev.start_time)}</div>}
+                      {(ev.event_date || ev.location) && (
+                        <div className="wp-tl-sub">
+                          {[ev.event_date ? formatLongDate(ev.event_date) : null, ev.location || null].filter(Boolean).join(" · ")}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              )}
-              {ceremony_time && (
-                <div className="wp-tl-item">
-                  <div className="wp-tl-node"><div className="wp-tl-icon">💍</div><div className="wp-tl-connector" /></div>
-                  <div className="wp-tl-body">
-                    <div className="wp-tl-label">{t("wedding.timeline.solemnisation")}</div>
-                    <div className="wp-tl-value">{fmt12h(ceremony_time)}</div>
-                    {!tea_ceremony_time && wedding_date && <div className="wp-tl-sub">{formatLongDate(wedding_date)}</div>}
-                  </div>
-                </div>
-              )}
-              {dinner_time && (
-                <div className="wp-tl-item">
-                  <div className="wp-tl-node"><div className="wp-tl-icon">🍽</div><div className="wp-tl-connector" /></div>
-                  <div className="wp-tl-body">
-                    <div className="wp-tl-label">{t(`wedding.timeline.${getMealType(dinner_time)}`)}</div>
-                    <div className="wp-tl-value">{fmt12h(dinner_time)}</div>
-                  </div>
-                </div>
+                ))
+              ) : (
+                <>
+                  {tea_ceremony_time && (
+                    <div className="wp-tl-item">
+                      <div className="wp-tl-node"><div className="wp-tl-icon">🍵</div><div className="wp-tl-connector" /></div>
+                      <div className="wp-tl-body">
+                        <div className="wp-tl-label">{t("wedding.timeline.tea")}</div>
+                        <div className="wp-tl-value">{fmt12h(tea_ceremony_time)}</div>
+                        {wedding_date && <div className="wp-tl-sub">{formatLongDate(wedding_date)}</div>}
+                      </div>
+                    </div>
+                  )}
+                  {ceremony_time && (
+                    <div className="wp-tl-item">
+                      <div className="wp-tl-node"><div className="wp-tl-icon">💍</div><div className="wp-tl-connector" /></div>
+                      <div className="wp-tl-body">
+                        <div className="wp-tl-label">{t("wedding.timeline.solemnisation")}</div>
+                        <div className="wp-tl-value">{fmt12h(ceremony_time)}</div>
+                        {!tea_ceremony_time && wedding_date && <div className="wp-tl-sub">{formatLongDate(wedding_date)}</div>}
+                      </div>
+                    </div>
+                  )}
+                  {dinner_time && (
+                    <div className="wp-tl-item">
+                      <div className="wp-tl-node"><div className="wp-tl-icon">🍽</div><div className="wp-tl-connector" /></div>
+                      <div className="wp-tl-body">
+                        <div className="wp-tl-label">{t(`wedding.timeline.${getMealType(dinner_time)}`)}</div>
+                        <div className="wp-tl-value">{fmt12h(dinner_time)}</div>
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
               {(venue_name || venue_address) && (
                 <div className="wp-tl-item">
