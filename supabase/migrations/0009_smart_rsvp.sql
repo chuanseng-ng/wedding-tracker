@@ -241,7 +241,7 @@ as $$
     coalesce(e.content_translations, '{}'::jsonb)
   from public.wedding_events e
   join public.weddings w on w.id = e.wedding_id
-  where w.slug = p_slug and e.is_active
+  where w.slug = p_slug and e.is_active and coalesce(w.enable_smart_rsvp, false)
   order by e.sort_order, e.start_time;
 $$;
 
@@ -297,6 +297,7 @@ as $$
         from public.guest_event_rsvps ger
         join public.wedding_events e on e.id = ger.event_id
         where ger.guest_id = g.id and ger.invited and e.is_active
+          and coalesce((select enable_smart_rsvp from public.weddings limit 1), false)
       ) s
     ), '[]'::jsonb),
     -- event_responses: current per-body per-event answers (primary + children).
@@ -313,6 +314,7 @@ as $$
       ) b
       join public.guest_event_rsvps ger on ger.guest_id = b.id and ger.invited
       join public.wedding_events e on e.id = ger.event_id and e.is_active
+      where coalesce((select enable_smart_rsvp from public.weddings limit 1), false)
     ), '[]'::jsonb)
   from public.guests g
   where g.rsvp_token = p_token;
@@ -359,6 +361,8 @@ declare
   v_dietary       text;
   v_target_id     uuid;
   v_requires_meal boolean;
+  v_enabled       boolean;
+  v_meal_event    uuid;
 begin
   -- 1. Resolve the primary + the party side it should be filed under.
   select id,
@@ -370,10 +374,22 @@ begin
     raise exception 'invalid rsvp token';
   end if;
 
-  -- Bound the anon-supplied payload (mirrors the plus-one cap; cheap DoS guard).
-  if jsonb_typeof(coalesce(p_event_responses, '[]'::jsonb)) = 'array'
-     and jsonb_array_length(coalesce(p_event_responses, '[]'::jsonb)) > 100 then
+  -- Reject a malformed payload before iterating (a non-array would otherwise
+  -- error inside jsonb_array_elements), then bound its size (cheap DoS guard).
+  if jsonb_typeof(coalesce(p_event_responses, '[]'::jsonb)) <> 'array' then
+    raise exception 'event responses must be an array';
+  end if;
+  if jsonb_array_length(coalesce(p_event_responses, '[]'::jsonb)) > 100 then
     raise exception 'too many event responses';
+  end if;
+
+  -- Smart-RSVP submit is a no-op unless the feature is enabled (the public form
+  -- uses the legacy submit_rsvp when OFF). Load the flag + designated meal event.
+  select coalesce(enable_smart_rsvp, false), primary_meal_event_id
+    into v_enabled, v_meal_event
+  from public.weddings limit 1;
+  if not coalesce(v_enabled, false) then
+    return;
   end if;
 
   -- 2. Update the primary's non-event fields (attendance is mirrored from events).
@@ -430,9 +446,24 @@ begin
   join public.wedding_events e on e.id = ger.event_id
   where ger.guest_id = v_primary_id and ger.invited;
 
-  -- 5. Materialize a junction row per child × per active invited event.
-  insert into public.guest_event_rsvps (guest_id, event_id, invited, status)
-  select c.id, e, true, 'pending'
+  -- 5. Materialize a junction row per child × per active invited event. Seed the
+  --    initial status/meal from the child's existing LEGACY RSVP so enrolling a
+  --    guest who already answered under the old flow doesn't regress them to
+  --    pending via the mirror trigger. `on conflict do nothing` leaves existing
+  --    per-event rows untouched (re-submits never re-seed).
+  insert into public.guest_event_rsvps (
+    guest_id, event_id, invited, status, meal_choice, dietary_notes, responded_at
+  )
+  select
+    c.id,
+    e,
+    true,
+    case when c.rsvp_status in ('confirmed', 'declined') then c.rsvp_status else 'pending' end,
+    case when c.rsvp_status = 'confirmed' and v_meal_event = e
+         then left(coalesce(c.meal_choice, ''), 60) else '' end,
+    case when c.rsvp_status = 'confirmed' and v_meal_event = e
+         then left(coalesce(c.dietary_notes, ''), 500) else '' end,
+    case when c.rsvp_status in ('confirmed', 'declined') then c.rsvp_at else null end
   from public.guests c
   cross join unnest(v_invited) as e
   where c.primary_guest_id = v_primary_id
@@ -464,8 +495,10 @@ begin
       continue;
     end if;
 
-    -- Resolve the target body (blank body_name → the primary).
-    if trim(v_body_name) = '' then
+    -- Resolve the target body. The primary is identified by a blank body_name OR
+    -- an explicit is_primary flag (get_guest_by_rsvp_token emits the primary with
+    -- its own name + is_primary=true, so a round-tripped primary response matches).
+    if trim(v_body_name) = '' or coalesce(v_resp->>'is_primary', 'false') = 'true' then
       v_target_id := v_primary_id;
     else
       select id into v_target_id
@@ -568,6 +601,9 @@ as $$
   limit 1;
 $$;
 
+-- Stays anon-callable: the PUBLIC RSVP form (RsvpPage.jsx) reads it to render the
+-- couple's names/venue/theme and the enable_* flags. It is a read of non-secret
+-- display config only (no guest data), so anon read is intentional, not a leak.
 grant execute on function public.get_wedding_config() to anon, authenticated;
 
 -- 8b. Public page read — append enable_smart_rsvp (positional consumer; keep last).
@@ -685,5 +721,18 @@ begin
 end;
 $$;
 
+-- Admin WRITE — restrict to authenticated helpers. These are only ever called by
+-- the signed-in admin console (AdminApp.jsx); anon must not be able to overwrite
+-- the wedding singleton (names/venue/times/flags). Closes the pre-existing anon
+-- grant on the config-write RPCs (mirrors it for its twin upsert_wedding_page).
+revoke execute on function public.upsert_wedding_config(text, text, date, text, text, text, text, text, boolean, uuid)
+  from anon;
 grant execute on function public.upsert_wedding_config(text, text, date, text, text, text, text, text, boolean, uuid)
-  to anon, authenticated;
+  to authenticated;
+
+revoke execute on function public.upsert_wedding_page(
+  text, text, text, text, jsonb, date, boolean, text, text, text, boolean, text, text, jsonb, jsonb, jsonb, text
+) from anon;
+grant execute on function public.upsert_wedding_page(
+  text, text, text, text, jsonb, date, boolean, text, text, text, boolean, text, text, jsonb, jsonb, jsonb, text
+) to authenticated;

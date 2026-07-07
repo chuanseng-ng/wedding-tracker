@@ -21,7 +21,7 @@ const norm = (s) => String(s ?? '').toLowerCase().trim();
  * @param {object}   input
  * @param {Array<{id:string,requires_meal?:boolean}>} input.invitedEvents  The primary's invited events.
  * @param {Array<{name:string,is_primary?:boolean}>}  input.bodies         Primary + reconciled child bodies.
- * @param {Array<{body_name?:string,event_id:string,status?:string,meal_choice?:string,dietary_notes?:string}>} input.submitted
+ * @param {Array<{body_name?:string,is_primary?:boolean,event_id:string,status?:string,meal_choice?:string,dietary_notes?:string}>} input.submitted
  * @returns {{rows:Array, rejected:Array}}
  *   rows: one entry per body per invited event, ready to upsert.
  *   rejected: submitted entries that reference an un-invited event or unknown body.
@@ -41,7 +41,10 @@ export function reconcileEventResponses({ invitedEvents, bodies, submitted } = {
   // Index valid submitted responses by "body|event" for O(1) lookup.
   const submittedByKey = new Map();
   for (const s of subs) {
-    const targetBody = norm(s.body_name) === '' ? primary : childByName.get(norm(s.body_name));
+    // Primary is identified by a blank body_name OR an explicit is_primary flag
+    // (the token API emits the primary with its own name + is_primary=true).
+    const isPrimaryResp = norm(s.body_name) === '' || s.is_primary === true;
+    const targetBody = isPrimaryResp ? primary : childByName.get(norm(s.body_name));
     if (!targetBody) { rejected.push(s); continue; }          // unknown / de-listed body
     if (!eventById.has(s.event_id)) { rejected.push(s); continue; } // self-elevation guard
     submittedByKey.set(`${norm(targetBody.name)}|${s.event_id}`, s);

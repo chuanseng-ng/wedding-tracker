@@ -117,6 +117,18 @@ describe('reconcileEventResponses — guards', () => {
     expect(rejected).toContainEqual(expect.objectContaining({ body_name: 'Alice' }));
   });
 
+  it('resolves the primary from a round-tripped response (name + is_primary=true)', () => {
+    // get_guest_by_rsvp_token emits the primary with body_name = its own name and
+    // is_primary=true; the flag must still resolve it to the primary.
+    const { rows, rejected } = reconcileEventResponses({
+      invitedEvents: [ev('tea')],
+      bodies: [body('Alice', true)],
+      submitted: [{ body_name: 'Alice', is_primary: true, event_id: 'tea', status: 'confirmed' }],
+    });
+    expect(rows[0].status).toBe('confirmed');
+    expect(rejected).toHaveLength(0);
+  });
+
   it('tolerates null inputs (Supabase data starts null)', () => {
     expect(() => reconcileEventResponses({ invitedEvents: null, bodies: null, submitted: null })).not.toThrow();
     expect(reconcileEventResponses()).toEqual({ rows: [], rejected: [] });
