@@ -33,4 +33,14 @@ describe('eventTimelineIcon', () => {
   it('is case-insensitive', () => {
     expect(eventTimelineIcon('WEDDING BANQUET')).toBe('🍽');
   });
+
+  it('does not false-match keywords inside unrelated words (word-anchored)', () => {
+    expect(eventTimelineIcon('Steak Dinner')).toBe('🍽');           // not 🍵 from "s-tea-k"
+    expect(eventTimelineIcon('Message from the Groom')).toBe('📅'); // not 💍 from "f-rom"/"G-room"
+  });
+
+  it('matches register / registry / registration', () => {
+    expect(eventTimelineIcon('Marriage Registration')).toBe('💍');
+    expect(eventTimelineIcon('Registry Office')).toBe('💍');
+  });
 });

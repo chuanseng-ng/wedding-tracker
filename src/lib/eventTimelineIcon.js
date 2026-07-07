@@ -2,9 +2,12 @@
 // no icon field). Keyword-matched, with a neutral calendar fallback. Kept pure so
 // the wedding-page timeline stays presentational and this stays unit-testable.
 
+// Latin keywords are word-anchored so common words don't false-match (e.g. the
+// "tea" in "steak", the "rom" in "from"/"Groom"). CJK terms match as substrings
+// (word boundaries don't apply to CJK).
 const RULES = [
-  [/tea|茶/i, '🍵'],
-  [/solemn|regist\b|registr|ceremony|church|vow|nikah|rom\b|婚礼|证婚/i, '💍'],
+  [/\btea\b|茶/i, '🍵'],
+  [/solemn|\bregist(?:er|ry|ration)?\b|ceremony|church|vow|nikah|\brom\b|婚礼|证婚/i, '💍'],
   [/cocktail|drinks|aperitif/i, '🥂'],
   [/banquet|dinner|lunch|brunch|reception|meal|dining|feast|宴/i, '🍽'],
   [/photo|gallery|shoot/i, '📸'],
