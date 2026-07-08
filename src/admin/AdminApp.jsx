@@ -13,6 +13,7 @@ import SeatingTab from "./SeatingTab.jsx";
 import WeddingSetupTab from "./WeddingSetupTab.jsx";
 import WeddingPageTab from "../wedding/WeddingPageTab.jsx";
 import WishesWrappedTab from "./WishesWrappedTab.jsx";
+import BudgetTab from "./BudgetTab.jsx";
 
 // ─── PAYNOW CONFIG ────────────────────────────────────────────────────────────
 // The host's PayNow-linked mobile number and display name. These are NOT secret
@@ -1064,6 +1065,26 @@ export default function WeddingTracker() {
     }
   };
 
+  const saveBudgetConfig = async ({ overall_budget_cap, budget_categories }) => {
+    if (isDemoMode) {
+      setWedding((w) => ({ ...(w || {}), overall_budget_cap, budget_categories }));
+      showToast("Budget settings saved");
+      return true;
+    }
+    try {
+      await sb.rpc("upsert_budget_config", {
+        p_overall_budget_cap: overall_budget_cap,
+        p_budget_categories: budget_categories,
+      });
+      await loadWedding();
+      showToast("Budget settings saved");
+      return true;
+    } catch {
+      showToast("Could not save budget settings — check connection");
+      return false;
+    }
+  };
+
   // Auto-open setup modal on first launch (no wedding row yet).
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -1620,6 +1641,11 @@ export default function WeddingTracker() {
               <button className={`view-tab ${view === "wishes-wrapped" ? "active" : ""}`} onClick={() => setView("wishes-wrapped")}>
                 ✨ Wishes Wrapped
               </button>
+              {role === "couple" && (
+                <button className={`view-tab ${view === "budget" ? "active" : ""}`} onClick={() => setView("budget")}>
+                  💰 Budget
+                </button>
+              )}
             </>
           ) : (
             <>
@@ -1865,6 +1891,13 @@ export default function WeddingTracker() {
             <WeddingPageTab wedding={wedding} onSave={saveWeddingPage} showToast={showToast} />
           ) : view === "wishes-wrapped" ? (
             <WishesWrappedTab guests={guests} wedding={wedding} />
+          ) : view === "budget" ? (
+            <BudgetTab
+              wedding={wedding}
+              onSaveBudget={saveBudgetConfig}
+              showToast={showToast}
+              isCouple={role === "couple"}
+            />
           ) : ANGBAO_ENABLED && view === "angbao" ? (
             /* ANGBAO VIEW */
             <>
