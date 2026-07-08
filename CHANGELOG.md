@@ -5,6 +5,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [2026-07-08] — feat/role-based-access (#89)
+
+### Added
+
+- **Role-based access — Couple vs Bridal Team** — the login screen now has a two-step flow: users pick a role (Couple or Bridal Team) then enter their password. Each role authenticates against its own Supabase Auth account (`VITE_COUPLE_EMAIL` / `VITE_HELPER_EMAIL`).
+- **New `VITE_COUPLE_EMAIL` env var** — couple's Supabase Auth account is now explicitly configured. `VITE_HELPER_EMAIL` is repurposed to the bridal team account (previously it was the couple's account, confusingly named).
+- **Bridal Team view** — locked to D-Day mode with only guest check-in, angbao recording, lucky draw, and read-only seating chart visible. Hidden: mode toggle, Wedding Setup, Submissions tab, Import/Export/Backup buttons, guest add/edit/delete, guest notes, angbao total stat pill.
+- **Sign-out button** — added to the header (non-demo) so either role can hand a device back to the other without a page reload clearing state.
+- **Session restore** — on page reload, role is re-derived from `session.user.email` via `getRole()`; unrecognised accounts are signed out (fail-closed).
+- **`/api/generate-theme` updated** — auth allowlist now accepts both couple and helper emails (previously only one email was checked).
+- **User guide updated** — new auth accounts table in setup section, updated env var docs, revised security section.
+
+---
+
 ## [2026-07-08] — fix/language-switcher-hide-empty-locales (#85)
 
 ### Fixed
