@@ -1095,6 +1095,26 @@ export default function WeddingTracker() {
     }
   };
 
+  // Manual per-event attendance logging (#78, Phase 6) — the issue's fallback.
+  // Updates an existing invited guest_event_rsvps row; the mirror trigger keeps
+  // the legacy guests columns in sync. `patch` is { status } and/or { meal_choice }.
+  const setEventResponse = async (guest, eventId, patch) => {
+    if (isDemoMode) {
+      setEventRsvps((prev) => prev.map((r) =>
+        r.guest_id === guest.id && r.event_id === eventId ? { ...r, ...patch } : r));
+      return;
+    }
+    try {
+      const { error } = await supabase.from("guest_event_rsvps")
+        .update({ ...patch, responded_at: new Date().toISOString() })
+        .eq("guest_id", guest.id).eq("event_id", eventId);
+      if (error) throw error;
+      await loadEventRsvps();
+    } catch {
+      showToast("Could not update attendance — check connection");
+    }
+  };
+
   const saveWeddingPage = async (form) => {
     if (isDemoMode) {
       setWedding((w) => ({ ...(w || {}), ...form }));
@@ -1874,8 +1894,10 @@ export default function WeddingTracker() {
               enableSmartRsvp={!!wedding?.enable_smart_rsvp}
               events={weddingEvents}
               eventRsvps={eventRsvps}
+              primaryMealEventId={wedding?.primary_meal_event_id || null}
               onSetInvited={setGuestInvited}
               onBulkInvite={bulkInvite}
+              onSetEventResponse={setEventResponse}
             />
           ) : view === "seating" ? (
             <SeatingTab guests={guests} onUpdate={updateGuest} onResetSeating={resetSeating} showToast={showToast} />
