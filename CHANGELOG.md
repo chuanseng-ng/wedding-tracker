@@ -5,6 +5,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [2026-07-08] — fix/language-switcher-hide-empty-locales (#85)
+
+### Fixed
+
+- **Public wedding page** — language switcher now only shows locales where the couple has actually provided translated content (at least one non-empty translatable field or Q&A answer). Previously all six registered locales were always shown, leaving guests able to switch to a language with entirely empty content. English is always shown; the switcher hides entirely when no other locale has content.
+
+---
+
 ## [2026-07-08] — fix/ux-audit-high-priority (#84)
 
 ### Fixed
