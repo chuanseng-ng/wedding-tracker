@@ -15,6 +15,8 @@ export default {
   "wedding.inviteTag": "✦ {groom} & {bride}가 당신을 초대합니다 ✦",
   "wedding.inviteTagFallback": "— — — 진심으로 초대합니다 — — —",
   "wedding.rsvpNow": "지금 참석 여부 알리기",
+  "wedding.loading": "웨딩 페이지를 불러오는 중",
+  "wedding.rsvpHint": "청첩장에 있는 개인 링크를 사용하시면 더 빠르게 이용하실 수 있습니다",
 
   "wedding.countdown.today": "바로 오늘입니다! 🎊",
   "wedding.countdown.toGo_one": "{n}일 남음",
@@ -59,6 +61,7 @@ export default {
   "rsvp.invited": "당신을 초대합니다",
   "rsvp.eyebrow": "참석 회신",
   "rsvp.loading": "정보를 불러오는 중…",
+  "rsvp.configError": "행사 정보를 불러오지 못했습니다. 새로고침해 주세요.",
   "rsvp.demoBadge": "데모 모드",
 
   "rsvp.name.label": "성함 (전체 이름)",
@@ -134,6 +137,7 @@ export default {
   "rsvp.confirm.miss": "보고 싶을 거예요!",
   "rsvp.confirm.yesMsg": "참석 회신이 확정되었습니다. {couple}가 함께 축하할 날을 손꼽아 기다립니다.",
   "rsvp.confirm.noMsg": "알려주셔서 감사합니다. {couple}가 아쉬워할 거예요.",
+  "rsvp.confirm.addToCalendar": "캘린더에 추가",
 
   "rsvp.err.nameSelect": "위에 성함을 입력하고 목록에서 선택해 주세요.",
   "rsvp.err.nameEnter": "성함을 입력해 주세요.",

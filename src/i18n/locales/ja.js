@@ -15,6 +15,8 @@ export default {
   "wedding.inviteTag": "✦ {groom} & {bride} よりご招待します ✦",
   "wedding.inviteTagFallback": "— — — ご招待申し上げます — — —",
   "wedding.rsvpNow": "今すぐ出欠を登録",
+  "wedding.loading": "結婚式ページを読み込んでいます",
+  "wedding.rsvpHint": "招待状に記載の専用リンクからのご登録がおすすめです",
 
   "wedding.countdown.today": "本日です！🎊",
   "wedding.countdown.toGo_one": "あと {n} 日",
@@ -59,6 +61,7 @@ export default {
   "rsvp.invited": "ご招待",
   "rsvp.eyebrow": "出欠登録",
   "rsvp.loading": "あなたの情報を読み込んでいます…",
+  "rsvp.configError": "イベントの詳細を読み込めませんでした。再読み込みしてください。",
   "rsvp.demoBadge": "デモモード",
 
   "rsvp.name.label": "お名前（フルネーム）",
@@ -134,6 +137,7 @@ export default {
   "rsvp.confirm.miss": "お会いできず残念です！",
   "rsvp.confirm.yesMsg": "ご出欠を承りました。{couple} は一緒にお祝いできるのを楽しみにしています。",
   "rsvp.confirm.noMsg": "お知らせいただきありがとうございます。{couple} は残念に思っています。",
+  "rsvp.confirm.addToCalendar": "カレンダーに追加",
 
   "rsvp.err.nameSelect": "上でお名前を入力し、リストから選択してください。",
   "rsvp.err.nameEnter": "お名前を入力してください。",

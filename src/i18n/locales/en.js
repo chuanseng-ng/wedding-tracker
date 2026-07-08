@@ -15,6 +15,8 @@ export default {
   "wedding.inviteTag": "✦ {groom} & {bride} invite you ✦",
   "wedding.inviteTagFallback": "— — — You are cordially invited — — —",
   "wedding.rsvpNow": "RSVP Now",
+  "wedding.loading": "Loading wedding page",
+  "wedding.rsvpHint": "Use the personal link in your invitation for a faster experience",
 
   "wedding.countdown.today": "Today! 🎊",
   "wedding.countdown.toGo_one": "{n} day to go",
@@ -60,6 +62,7 @@ export default {
   "rsvp.invited": "You're Invited",
   "rsvp.eyebrow": "RSVP",
   "rsvp.loading": "Loading your details…",
+  "rsvp.configError": "Could not load event details — please try refreshing.",
   "rsvp.demoBadge": "Demo Mode",
 
   "rsvp.name.label": "Your Full Name",
@@ -138,6 +141,7 @@ export default {
   "rsvp.confirm.miss": "We'll miss you!",
   "rsvp.confirm.yesMsg": "Your RSVP is confirmed. {couple} can't wait to celebrate with you.",
   "rsvp.confirm.noMsg": "Thanks for letting us know. {couple} will miss you.",
+  "rsvp.confirm.addToCalendar": "Add to Calendar",
 
   // Errors
   "rsvp.err.nameSelect": "Please type your name above and select it from the list.",

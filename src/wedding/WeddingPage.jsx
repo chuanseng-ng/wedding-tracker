@@ -536,7 +536,7 @@ export default function WeddingPage() {
     return (
       <>
         <style>{styles}</style>
-        <div className="wp-loading" aria-live="polite" aria-label="Loading wedding page">
+        <div className="wp-loading" aria-live="polite" aria-label={t("wedding.loading")}>
           <div className="wp-loading-icon">✦</div>
         </div>
       </>
@@ -681,7 +681,7 @@ export default function WeddingPage() {
             <a className="wp-rsvp-btn" href={rsvpHref}>{t("wedding.rsvpNow")}</a>
             {!token && (
               <div style={{ marginTop: 8, fontSize: 12, color: "rgba(255,255,255,0.55)", textAlign: "center" }}>
-                Use the personal link in your invitation for a faster experience
+                {t("wedding.rsvpHint")}
               </div>
             )}
           </div>
