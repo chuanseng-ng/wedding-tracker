@@ -40,7 +40,7 @@ const styles = `
 
 export default function MilestoneEditor({ milestones, onChange }) {
   const addMilestone = () => {
-    onChange([...milestones, { label: "Payment", amount: "", due_date: "", paid: false }]);
+    onChange([...milestones, { _key: crypto.randomUUID(), label: "Payment", amount: "", due_date: "", paid: false }]);
   };
 
   const update = (idx, field, value) => {
@@ -65,7 +65,7 @@ export default function MilestoneEditor({ milestones, onChange }) {
           </div>
         )}
         {milestones.map((m, idx) => (
-          <div key={idx} className="milestone-row">
+          <div key={m._key ?? idx} className="milestone-row">
             <input
               className="form-input"
               style={{ fontSize: 13, padding: "7px 10px" }}
