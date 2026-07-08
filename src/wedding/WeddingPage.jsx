@@ -1,9 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { sb, isDemoMode } from "../lib/supabase.js";
 import { theme } from "../shared/theme.js";
-import { useLocale } from "../i18n/index.jsx";
-import { localizeWedding } from "../i18n/content.js";
+import { LOCALES, useLocale } from "../i18n/index.jsx";
+import { localizeWedding, TRANSLATABLE_FIELDS } from "../i18n/content.js";
 import { sanitizeThemeTokens, isCompleteThemeTokens, themeTokenStyle } from "../lib/themeTokens.js";
 import { normalizeSectionPhotos } from "../lib/sectionPhotos.js";
 import LanguageSwitcher from "../i18n/LanguageSwitcher.jsx";
@@ -445,6 +445,28 @@ export default function WeddingPage() {
   // Couple content in the active language (per-field fallback to English) — #53 Phase 2.
   const lw = localizeWedding(wedding, locale);
 
+  // Only show locales where the couple has filled in at least one translated field (#77).
+  // English is always available; others require ≥1 non-empty field or Q&A answer.
+  const availableLocales = useMemo(() => {
+    if (!wedding?.content_translations) return ["en"];
+    const populated = ["en"];
+    for (const code of Object.keys(LOCALES)) {
+      if (code === "en") continue;
+      const tr = wedding.content_translations[code];
+      if (!tr || typeof tr !== "object") continue;
+      const hasField = TRANSLATABLE_FIELDS.some(
+        (f) => typeof tr[f] === "string" && tr[f].trim() !== ""
+      );
+      const hasQA =
+        Array.isArray(tr.fun_qa) &&
+        tr.fun_qa.some(
+          (item) => typeof item?.answer === "string" && item.answer.trim() !== ""
+        );
+      if (hasField || hasQA) populated.push(code);
+    }
+    return populated;
+  }, [wedding]);
+
   useEffect(() => {
     if (isDemoMode) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -554,7 +576,7 @@ export default function WeddingPage() {
       <div className="wp" data-theme={effectiveTheme} style={customStyle}>
 
         {/* Sit below the sticky preview banner (and above it in z-order) when unpublished. */}
-        <LanguageSwitcher style={{ position: "absolute", top: is_published ? 16 : 52, right: 16, zIndex: 201 }} />
+        <LanguageSwitcher availableLocales={availableLocales} style={{ position: "absolute", top: is_published ? 16 : 52, right: 16, zIndex: 201 }} />
 
         {effectiveTheme === "garden" && (
           <div className="wp-leaves-bg">
