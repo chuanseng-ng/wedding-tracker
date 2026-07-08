@@ -156,6 +156,7 @@ const styles = theme + `
     background: transparent; color: var(--brown); transition: all 0.15s;
   }
   .filter-tab.active { background: var(--charcoal); color: var(--gold-light); }
+  .filter-tab-count { opacity: 0.55; font-size: 11px; }
 
   .btn {
     display: flex; align-items: center; gap: 6px;
@@ -808,14 +809,18 @@ export default function WeddingTracker() {
   const [accessCode, setAccessCode] = useState("");
   const [pinError, setPinError] = useState("");
   const [unlocking, setUnlocking] = useState(false);
+  const [pinFailCount, setPinFailCount] = useState(0);
+  const [pinLocked, setPinLocked] = useState(false);
   const [guests, setGuests] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [guestLoadError, setGuestLoadError] = useState(false);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [mode, setMode] = useState("planning"); // "planning" | "dday"
   const [view, setView] = useState("rsvp");
   const [modal, setModal] = useState(null); // 'add' | 'edit' | 'upload' | 'setup'
   const [editGuest, setEditGuest] = useState(null);
+  const [formNameError, setFormNameError] = useState("");
   const [toast, setToast] = useState(null);
   const [form, setForm] = useState({ name: "", table_number: "", notes: "", party: "", is_vip: false });
   const [csvText, setCsvText] = useState("");
@@ -870,7 +875,19 @@ export default function WeddingTracker() {
     });
     setUnlocking(false);
     if (error) {
-      setPinError("Incorrect access code, try again");
+      const newCount = pinFailCount + 1;
+      setPinFailCount(newCount);
+      const isRateLimited =
+        error.message?.toLowerCase().includes("too many") ||
+        error.message?.toLowerCase().includes("rate") ||
+        newCount >= 3;
+      if (isRateLimited) {
+        setPinError("Too many attempts — wait 60 seconds before trying again");
+        setPinLocked(true);
+        setTimeout(() => { setPinLocked(false); setPinFailCount(0); setPinError(""); }, 60_000);
+      } else {
+        setPinError("Incorrect access code, try again");
+      }
       setAccessCode("");
     } else {
       setUnlocked(true);
@@ -913,8 +930,10 @@ export default function WeddingTracker() {
               : row
           )
         );
+        setGuestLoadError(false);
       }
     } catch {
+      setGuestLoadError(true);
       showToast("Failed to load guests");
     }
     setLoading(false);
@@ -1202,7 +1221,8 @@ export default function WeddingTracker() {
 
   // Save guest (add/edit)
   const saveGuest = async () => {
-    if (!cleanName(form.name)) return;
+    if (!cleanName(form.name)) { setFormNameError("Please enter a guest name"); return; }
+    setFormNameError("");
     const data = {
       name: cleanName(form.name),
       table_number: cleanTable(form.table_number),
@@ -1421,7 +1441,7 @@ export default function WeddingTracker() {
               placeholder="Access code"
               autoComplete="current-password"
             />
-            <button type="submit" className="pin-unlock" disabled={unlocking || !accessCode}>
+            <button type="submit" className="pin-unlock" disabled={unlocking || !accessCode || pinLocked}>
               {unlocking ? "Checking…" : "Unlock"}
             </button>
             <div className="pin-error">{pinError}</div>
@@ -1445,9 +1465,11 @@ export default function WeddingTracker() {
         <header className="header">
           <div className="header-left">
             <div className="header-title">
-              {wedding?.bride_name && wedding?.groom_name
-                ? `♡ ${wedding.bride_name} & ${wedding.groom_name}`
-                : mode === "planning" ? "♡ Wedding Planner" : "♡ Wedding Day"}
+              {wedding === undefined
+                ? "♡ —"
+                : wedding?.bride_name && wedding?.groom_name
+                  ? `♡ ${wedding.bride_name} & ${wedding.groom_name}`
+                  : mode === "planning" ? "♡ Wedding Planner" : "♡ Wedding Day"}
             </div>
             <div className="header-subtitle">
               {mode === "planning" ? "RSVP & Seating Plan" : "Guest Attendance Tracker"}
@@ -1498,7 +1520,7 @@ export default function WeddingTracker() {
                 )}
               </>
             )}
-            <button className="gear-btn" onClick={() => setSetupOpen(true)} title="Wedding Setup">
+            <button className="gear-btn" onClick={() => setSetupOpen(true)} title="Wedding Setup" aria-label="Wedding Setup">
               <Icon.Settings />
             </button>
             <div className="mode-toggle">
@@ -1561,18 +1583,29 @@ export default function WeddingTracker() {
                 <input className="search-input" placeholder="Search name, table, or #draw-number…" value={search} onChange={(e) => setSearch(e.target.value)} />
               </div>
               <div className="filter-tabs">
-                {[["all","All"],["arrived","Arrived"],["pending","Pending"],...(ANGBAO_ENABLED ? [["angbao","🧧 Gave"]] : [])].map(([k,l]) => (
-                  <button key={k} className={`filter-tab ${filter === k ? "active" : ""}`} onClick={() => setFilter(k)}>{l}</button>
+                {[
+                  ["all", "All", guests.length],
+                  ["arrived", "Arrived", arrived],
+                  ["pending", "Pending", guests.length - arrived],
+                  ...(ANGBAO_ENABLED ? [["angbao", "🧧 Gave", angbaoCount]] : []),
+                ].map(([k, l, count]) => (
+                  <button key={k} className={`filter-tab ${filter === k ? "active" : ""}`} onClick={() => setFilter(k)}>
+                    {l} <span className="filter-tab-count">({count})</span>
+                  </button>
                 ))}
               </div>
             </>
           )}
-          <button className="btn btn-outline" onClick={() => { setModal("upload"); }}>
-            <Icon.Upload /> Import CSV
-          </button>
-          <button className="btn btn-gold" onClick={() => { setEditGuest(null); setForm({ name: "", table_number: "", notes: "", party: "", is_vip: false }); setModal("add"); }}>
-            <Icon.Plus /> Add Guest
-          </button>
+          {((mode === "planning" && view === "rsvp") || (mode === "dday" && view === "guests")) && (
+            <>
+              <button className="btn btn-outline" onClick={() => { setModal("upload"); }}>
+                <Icon.Upload /> Import CSV
+              </button>
+              <button className="btn btn-gold" onClick={() => { setEditGuest(null); setForm({ name: "", table_number: "", notes: "", party: "", is_vip: false }); setModal("add"); }}>
+                <Icon.Plus /> Add Guest
+              </button>
+            </>
+          )}
           {mode === "dday" && (
             <>
               <button className="btn btn-outline btn-sm" onClick={exportCSV} title="Export CSV"><Icon.Download /></button>
@@ -1599,6 +1632,12 @@ export default function WeddingTracker() {
 
           {loading ? (
             <div className="empty"><div className="empty-icon">⏳</div><div className="empty-text">Loading guests…</div></div>
+          ) : guestLoadError && guests.length === 0 ? (
+            <div className="empty">
+              <div className="empty-icon">⚠️</div>
+              <div className="empty-text">Could not load guests</div>
+              <div className="empty-sub">Check your connection, then <button className="btn btn-outline btn-sm" style={{ marginLeft: 8 }} onClick={loadGuests}>Retry</button></div>
+            </div>
           ) : view === "guests" ? (
             <div className="guest-grid">
               {filtered.length === 0 ? (
@@ -1832,14 +1871,15 @@ export default function WeddingTracker() {
 
         {/* ADD/EDIT MODAL */}
         {(modal === "add" || modal === "edit") && (
-          <div className="modal-overlay" onClick={() => setModal(null)}>
+          <div className="modal-overlay" onClick={() => { setModal(null); setFormNameError(""); }}>
             <div className="modal" onClick={(e) => e.stopPropagation()}>
               <div className="modal-title">{modal === "edit" ? "Edit Guest" : "Add Guest"}</div>
               <div className="form-grid">
                 <div className="form-row">
                   <div className="form-group" style={{flex:2}}>
                     <label className="form-label">Guest Name *</label>
-                    <input className="form-input" placeholder="Full name" value={form.name} onChange={(e) => setForm({...form, name: e.target.value})} autoFocus />
+                    <input className="form-input" placeholder="Full name" value={form.name} onChange={(e) => { setForm({...form, name: e.target.value}); setFormNameError(""); }} autoFocus />
+                    {formNameError && <div style={{ color: "#c0392b", fontSize: 12, marginTop: 4 }}>{formNameError}</div>}
                   </div>
                   <div className="form-group">
                     <label className="form-label">Table No.</label>
@@ -1864,7 +1904,7 @@ export default function WeddingTracker() {
                 </label>
               </div>
               <div className="modal-actions">
-                <button className="btn btn-outline" onClick={() => setModal(null)}>Cancel</button>
+                <button className="btn btn-outline" onClick={() => { setModal(null); setFormNameError(""); }}>Cancel</button>
                 <button className="btn btn-gold" onClick={saveGuest}>
                   {modal === "edit" ? "Save Changes" : "Add Guest"}
                 </button>
