@@ -323,7 +323,7 @@ function ConfirmationView({ name, attending, wedding }) {
           download="wedding.ics"
           style={{ display: "inline-block", marginTop: 16, fontSize: 13, color: "var(--gold-dark)", textDecoration: "underline", cursor: "pointer" }}
         >
-          📅 Add to Calendar
+          📅 {t("rsvp.confirm.addToCalendar")}
         </a>
       )}
     </div>
@@ -603,7 +603,7 @@ export default function RsvpPage() {
 
           {configError && (
             <div style={{ textAlign: "center", color: "var(--brown)", opacity: 0.7, fontSize: 13, marginBottom: 12 }}>
-              Could not load event details — please try refreshing.
+              {t("rsvp.configError")}
             </div>
           )}
 

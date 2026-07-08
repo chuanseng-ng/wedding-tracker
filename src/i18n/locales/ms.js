@@ -15,6 +15,8 @@ export default {
   "wedding.inviteTag": "✦ {groom} & {bride} menjemput anda ✦",
   "wedding.inviteTagFallback": "— — — Anda dijemput dengan penuh hormat — — —",
   "wedding.rsvpNow": "Sahkan Kehadiran Sekarang",
+  "wedding.loading": "Memuatkan halaman majlis perkahwinan",
+  "wedding.rsvpHint": "Gunakan pautan peribadi dalam jemputan anda untuk pengalaman yang lebih pantas",
 
   "wedding.countdown.today": "Hari ini! 🎊",
   "wedding.countdown.toGo_one": "{n} hari lagi",
@@ -59,6 +61,7 @@ export default {
   "rsvp.invited": "Anda Dijemput",
   "rsvp.eyebrow": "Pengesahan Kehadiran",
   "rsvp.loading": "Memuatkan butiran anda…",
+  "rsvp.configError": "Tidak dapat memuatkan butiran acara — sila cuba muat semula.",
   "rsvp.demoBadge": "Mod Demo",
 
   "rsvp.name.label": "Nama Penuh Anda",
@@ -134,6 +137,7 @@ export default {
   "rsvp.confirm.miss": "Kami akan merindui anda!",
   "rsvp.confirm.yesMsg": "Kehadiran anda telah disahkan. {couple} tidak sabar untuk meraikannya bersama anda.",
   "rsvp.confirm.noMsg": "Terima kasih kerana memberitahu kami. {couple} akan merindui anda.",
+  "rsvp.confirm.addToCalendar": "Tambah ke Kalendar",
 
   "rsvp.err.nameSelect": "Sila taip nama anda di atas dan pilih daripada senarai.",
   "rsvp.err.nameEnter": "Sila masukkan nama anda.",
