@@ -29,11 +29,6 @@ const PAYNOW_NAME = import.meta.env.VITE_PAYNOW_NAME || "";
 // DB is preserved and reappears if the feature is re-enabled. Default = enabled.
 const ANGBAO_ENABLED = import.meta.env.VITE_ENABLE_ANGBAO !== "false";
 
-// ─── COUPLE EMAIL ─────────────────────────────────────────────────────────────
-// The email address the couple signs in with. Used to gate couple-only tabs
-// (Budget). When unset, all authenticated users are treated as the couple.
-const COUPLE_EMAIL = import.meta.env.VITE_COUPLE_EMAIL || "";
-
 // ─── DEMO MODE (no Supabase) ──────────────────────────────────────────────────
 const DEMO_GUESTS = [
   { id: 1, name: "Tan Wei Ming", party: "bride", table_number: "1", table_id: "t1", checked_in: true, checked_in_at: "2024-06-15T18:32:00", angbao_given: true, angbao_amount: 200, draw_number: 1, notes: "Best man", is_vip: true, rsvp_status: "confirmed", rsvp_at: "2024-05-01T10:00:00", meal_choice: "Chicken", plus_one_name: "Emily Tan", dietary_notes: "", rsvp_message: "Can't wait!", rsvp_token: "a1b2c3d4-e5f6-7890-abcd-ef1234567890", email: "wei.ming@example.com" },
@@ -866,22 +861,6 @@ export default function WeddingTracker() {
     () => localStorage.getItem("safeDelete") !== "false"
   );
 
-  // isCouple: true when the signed-in user is the couple's account, not a helper.
-  // In demo mode or when COUPLE_EMAIL is unset, grant couple access to everyone.
-  const [isCouple, setIsCouple] = useState(isDemoMode || !COUPLE_EMAIL);
-
-  useEffect(() => {
-    if (isDemoMode || !COUPLE_EMAIL) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setIsCouple(true);
-      return;
-    }
-    supabase.auth.getSession().then(({ data }) => {
-      const email = data?.session?.user?.email ?? "";
-      setIsCouple(email.toLowerCase() === COUPLE_EMAIL.toLowerCase());
-    });
-  }, [unlocked]);
-
   // Hash-based routing: "#pay" opens the public ang-bao QR page (no login needed).
   useEffect(() => {
     const onHashChange = () => setRoute(window.location.hash.replace(/^#\/?/, ""));
@@ -1662,7 +1641,7 @@ export default function WeddingTracker() {
               <button className={`view-tab ${view === "wishes-wrapped" ? "active" : ""}`} onClick={() => setView("wishes-wrapped")}>
                 ✨ Wishes Wrapped
               </button>
-              {isCouple && (
+              {role === "couple" && (
                 <button className={`view-tab ${view === "budget" ? "active" : ""}`} onClick={() => setView("budget")}>
                   💰 Budget
                 </button>
@@ -1917,7 +1896,7 @@ export default function WeddingTracker() {
               wedding={wedding}
               onSaveBudget={saveBudgetConfig}
               showToast={showToast}
-              isCouple={isCouple}
+              isCouple={role === "couple"}
             />
           ) : ANGBAO_ENABLED && view === "angbao" ? (
             /* ANGBAO VIEW */
