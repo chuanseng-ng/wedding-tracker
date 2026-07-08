@@ -8,7 +8,9 @@ const BLANK = {
   email: "",
   website: "",
   notes: "",
-  status: "enquired",
+  status: "enquiring",
+  quoted_price: "",
+  is_fully_paid: false,
   category_key: "",
   milestones: [],
   arrival_time: "",
@@ -21,6 +23,7 @@ export default function VendorModal({ mode, vendor, categories, onSave, onClose 
     milestones: (vendor?.milestones ?? []).map((m) => ({ ...m })),
   }));
   const [saving, setSaving] = useState(false);
+  const [showArrival, setShowArrival] = useState(Boolean(vendor?.arrival_time));
 
   const set = (field, value) => setForm((f) => ({ ...f, [field]: value }));
 
@@ -30,6 +33,8 @@ export default function VendorModal({ mode, vendor, categories, onSave, onClose 
     await onSave({
       ...form,
       company_name: form.company_name.trim(),
+      quoted_price: Number(form.quoted_price) || 0,
+      arrival_time: form.arrival_time || null,
       milestones: form.milestones.map((m) => ({
         ...m,
         amount: Number(m.amount) || 0,
@@ -77,19 +82,37 @@ export default function VendorModal({ mode, vendor, categories, onSave, onClose 
             </div>
           </div>
 
-          {/* Status */}
-          <div className="form-group">
-            <label className="form-label">Status</label>
-            <select
-              className="form-input"
-              value={form.status}
-              onChange={(e) => set("status", e.target.value)}
-            >
-              <option value="enquired">Enquired</option>
-              <option value="quoted">Quoted</option>
-              <option value="booked">Booked</option>
-              <option value="paid">Paid in Full</option>
-            </select>
+          {/* Contract total + Status */}
+          <div className="form-row">
+            <div className="form-group" style={{ flex: 2 }}>
+              <label className="form-label">
+                Contract total ($){" "}
+                <span style={{ fontWeight: 400, opacity: 0.6, fontSize: 11 }}>
+                  — the agreed price with this vendor
+                </span>
+              </label>
+              <input
+                className="form-input"
+                type="number"
+                min={0}
+                step={100}
+                placeholder="e.g. 5000"
+                value={form.quoted_price}
+                onChange={(e) => set("quoted_price", e.target.value)}
+                style={{ fontWeight: 600, fontSize: 15 }}
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Status</label>
+              <select
+                className="form-input"
+                value={form.status}
+                onChange={(e) => set("status", e.target.value)}
+              >
+                <option value="enquiring">Enquiring</option>
+                <option value="booked">Booked</option>
+              </select>
+            </div>
           </div>
 
           {/* Contact */}
@@ -151,24 +174,55 @@ export default function VendorModal({ mode, vendor, categories, onSave, onClose 
             />
           </div>
 
-          {/* Arrival time (reserved for D-Day timeline) */}
+          {/* Arrival time — collapsed by default */}
           <div className="form-group">
-            <label className="form-label">Arrival time (D-Day)</label>
-            <input
-              className="form-input"
-              type="time"
-              value={form.arrival_time ?? ""}
-              onChange={(e) => set("arrival_time", e.target.value)}
-            />
+            <button
+              type="button"
+              onClick={() => setShowArrival((v) => !v)}
+              style={{
+                background: "none", border: "none", padding: 0, cursor: "pointer",
+                color: "var(--brown)", fontSize: 12, opacity: 0.6,
+                display: "flex", alignItems: "center", gap: 4,
+              }}
+            >
+              <span style={{ fontSize: 10 }}>{showArrival ? "▾" : "▸"}</span>
+              D-Day arrival time
+            </button>
+            {showArrival && (
+              <input
+                className="form-input"
+                type="time"
+                style={{ marginTop: 6 }}
+                value={form.arrival_time ?? ""}
+                onChange={(e) => set("arrival_time", e.target.value)}
+              />
+            )}
           </div>
 
           {/* Milestones */}
           <div className="form-group" style={{ gridColumn: "1 / -1" }}>
-            <label className="form-label">Payment milestones</label>
-            <MilestoneEditor
-              milestones={form.milestones}
-              onChange={(milestones) => set("milestones", milestones)}
-            />
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+              <label className="form-label" style={{ margin: 0 }}>Payment milestones</label>
+              <label style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 13, cursor: "pointer", color: form.is_fully_paid ? "var(--green, #2e7d4f)" : "var(--brown)", fontWeight: form.is_fully_paid ? 600 : 400 }}>
+                <input
+                  type="checkbox"
+                  checked={form.is_fully_paid}
+                  onChange={(e) => set("is_fully_paid", e.target.checked)}
+                  style={{ width: 15, height: 15, cursor: "pointer" }}
+                />
+                Fully paid
+              </label>
+            </div>
+            {form.is_fully_paid ? (
+              <div style={{ padding: "10px 14px", background: "rgba(46,125,79,0.07)", borderRadius: 8, fontSize: 13, color: "#2e7d4f", border: "1.5px solid rgba(46,125,79,0.2)" }}>
+                Marked as fully paid — total paid = contract total ({form.quoted_price ? `$${Number(form.quoted_price).toLocaleString()}` : "$0"})
+              </div>
+            ) : (
+              <MilestoneEditor
+                milestones={form.milestones}
+                onChange={(milestones) => set("milestones", milestones)}
+              />
+            )}
           </div>
         </div>
 

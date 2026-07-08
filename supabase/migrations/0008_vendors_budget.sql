@@ -24,6 +24,8 @@ begin
 end $$;
 
 -- ── 2. vendors table ──────────────────────────────────────────────────────────
+-- Statuses: 'enquiring' (exploring/quoted, not committed) | 'booked' (committed).
+-- is_fully_paid overrides milestone totals when the vendor is fully settled.
 
 create table if not exists public.vendors (
   id            uuid        primary key default gen_random_uuid(),
@@ -34,8 +36,10 @@ create table if not exists public.vendors (
   email         text        not null default ''   check (char_length(email) <= 200),
   website       text        not null default ''   check (char_length(website) <= 500),
   notes         text        not null default ''   check (char_length(notes) <= 2000),
-  status        text        not null default 'enquired'
-                            check (status in ('enquired', 'quoted', 'booked', 'paid')),
+  status        text        not null default 'enquiring'
+                            check (status in ('enquiring', 'booked')),
+  quoted_price  numeric     not null default 0    check (quoted_price >= 0 and quoted_price <= 100000000),
+  is_fully_paid boolean     not null default false,
   milestones    jsonb       not null default '[]'::jsonb,
   arrival_time  time,
   key_dates     jsonb       not null default '{}'::jsonb,
@@ -54,13 +58,31 @@ begin
   end if;
 end $$;
 
+-- ── 3. Idempotent column/constraint fixes (for DBs where table already existed) ─
+
+-- quoted_price (added after initial deploy)
+alter table public.vendors
+  add column if not exists quoted_price numeric not null default 0
+    check (quoted_price >= 0 and quoted_price <= 100000000);
+
+-- is_fully_paid (added when Paid In Full status was replaced by this checkbox)
+alter table public.vendors
+  add column if not exists is_fully_paid boolean not null default false;
+
+-- Migrate old status values and replace the check constraint.
+update public.vendors set status = 'enquiring' where status in ('enquired', 'quoted', 'paid');
+alter table public.vendors drop constraint if exists vendors_status_check;
+alter table public.vendors
+  add constraint vendors_status_check check (status in ('enquiring', 'booked'));
+
+-- ── 4. Trigger ────────────────────────────────────────────────────────────────
 -- Reuse the set_updated_at trigger function defined in 0001_init.sql.
 drop trigger if exists vendors_set_updated_at on public.vendors;
 create trigger vendors_set_updated_at
   before update on public.vendors
   for each row execute function public.set_updated_at();
 
--- ── 3. RLS for vendors ────────────────────────────────────────────────────────
+-- ── 5. RLS for vendors ────────────────────────────────────────────────────────
 -- Same pattern as guests: authenticated role only — anon key cannot touch vendor data.
 
 alter table public.vendors enable row level security;
@@ -81,7 +103,7 @@ drop policy if exists "vendors_delete" on public.vendors;
 create policy "vendors_delete" on public.vendors
   for delete to authenticated using (true);
 
--- ── 4. Recreate get_wedding_config (adds budget columns to return type) ───────
+-- ── 6. Recreate get_wedding_config (adds budget columns to return type) ───────
 -- Must drop the 0007 version first (Postgres requires an exact signature match).
 
 drop function if exists public.get_wedding_config();
@@ -154,7 +176,7 @@ $$;
 
 grant execute on function public.get_wedding_config() to anon, authenticated;
 
--- ── 5. Dedicated budget-config write RPC ─────────────────────────────────────
+-- ── 7. Dedicated budget-config write RPC ─────────────────────────────────────
 -- Separate from upsert_wedding_config so saving budget caps never risks
 -- blanking the core wedding event fields.
 

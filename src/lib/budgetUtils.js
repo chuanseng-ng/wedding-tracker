@@ -1,7 +1,26 @@
 // Pure budget computation functions — no side effects, fully testable.
 // Milestone shape: { label: string, amount: number, due_date: string, paid: boolean }
 // BudgetCategory shape: { key: string, label: string, cap: number }
-// Vendor shape: { id, category_key, company_name, milestones: Milestone[], ... }
+// Vendor shape: { id, category_key, company_name, quoted_price, milestones: Milestone[], ... }
+//
+// committed = quoted_price (the agreed contract total).
+// paid      = sum of milestones marked paid (optional payment breakdown).
+
+/** How much a vendor has been contracted for.
+ *  Enquiring vendors are $0 — not committed until booked. */
+export function vendorCommitted(vendor) {
+  if (vendor.status === "enquiring") return 0;
+  return Number(vendor.quoted_price) || 0;
+}
+
+/** How much has been paid.
+ *  is_fully_paid overrides milestone totals — returns the full quoted price. */
+export function vendorPaid(vendor) {
+  if (vendor.is_fully_paid) return Number(vendor.quoted_price) || 0;
+  return (vendor.milestones ?? [])
+    .filter((m) => m.paid)
+    .reduce((s, m) => s + (Number(m.amount) || 0), 0);
+}
 
 /**
  * Derive display fields for a single vendor's milestone list.
@@ -27,21 +46,14 @@ export function computeVendorMilestones(milestones, todayISO) {
 /**
  * Per-category spend breakdown.
  * Returns array of { category, committed, paid, isOverBudget }.
- * "committed" = sum of all milestone amounts for vendors in that category.
- * "paid"      = sum of paid milestones only.
+ * committed = sum of quoted_price across vendors in that category.
+ * paid      = sum of paid milestones only.
  */
 export function computeCategoryStats(categories, vendors) {
   return categories.map((cat) => {
     const catVendors = vendors.filter((v) => v.category_key === cat.key);
-    const committed = catVendors.reduce(
-      (s, v) => s + v.milestones.reduce((ms, m) => ms + (Number(m.amount) || 0), 0),
-      0
-    );
-    const paid = catVendors.reduce(
-      (s, v) =>
-        s + v.milestones.filter((m) => m.paid).reduce((ms, m) => ms + (Number(m.amount) || 0), 0),
-      0
-    );
+    const committed = catVendors.reduce((s, v) => s + vendorCommitted(v), 0);
+    const paid      = catVendors.reduce((s, v) => s + vendorPaid(v), 0);
     const isOverBudget = cat.cap > 0 && committed > cat.cap;
     return { category: cat, committed, paid, isOverBudget };
   });
@@ -51,16 +63,9 @@ export function computeCategoryStats(categories, vendors) {
  * Top-level budget summary across all vendors.
  */
 export function computeOverallStats(overallCap, vendors) {
-  const totalCommitted = vendors.reduce(
-    (s, v) => s + v.milestones.reduce((ms, m) => ms + (Number(m.amount) || 0), 0),
-    0
-  );
-  const totalPaid = vendors.reduce(
-    (s, v) =>
-      s + v.milestones.filter((m) => m.paid).reduce((ms, m) => ms + (Number(m.amount) || 0), 0),
-    0
-  );
-  const isOverBudget = overallCap > 0 && totalCommitted > overallCap;
+  const totalCommitted = vendors.reduce((s, v) => s + vendorCommitted(v), 0);
+  const totalPaid      = vendors.reduce((s, v) => s + vendorPaid(v), 0);
+  const isOverBudget   = overallCap > 0 && totalCommitted > overallCap;
   return { totalCommitted, totalPaid, isOverBudget };
 }
 
