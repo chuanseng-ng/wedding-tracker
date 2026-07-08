@@ -13,6 +13,7 @@ import SeatingTab from "./SeatingTab.jsx";
 import WeddingSetupTab from "./WeddingSetupTab.jsx";
 import WeddingPageTab from "../wedding/WeddingPageTab.jsx";
 import WishesWrappedTab from "./WishesWrappedTab.jsx";
+import BudgetTab from "./BudgetTab.jsx";
 
 // ─── PAYNOW CONFIG ────────────────────────────────────────────────────────────
 // The host's PayNow-linked mobile number and display name. These are NOT secret
@@ -27,6 +28,11 @@ const PAYNOW_NAME = import.meta.env.VITE_PAYNOW_NAME || "";
 // events where collecting ang-bao isn't applicable. Existing angbao data in the
 // DB is preserved and reappears if the feature is re-enabled. Default = enabled.
 const ANGBAO_ENABLED = import.meta.env.VITE_ENABLE_ANGBAO !== "false";
+
+// ─── COUPLE EMAIL ─────────────────────────────────────────────────────────────
+// The email address the couple signs in with. Used to gate couple-only tabs
+// (Budget). When unset, all authenticated users are treated as the couple.
+const COUPLE_EMAIL = import.meta.env.VITE_COUPLE_EMAIL || "";
 
 // ─── DEMO MODE (no Supabase) ──────────────────────────────────────────────────
 const DEMO_GUESTS = [
@@ -860,6 +866,22 @@ export default function WeddingTracker() {
     () => localStorage.getItem("safeDelete") !== "false"
   );
 
+  // isCouple: true when the signed-in user is the couple's account, not a helper.
+  // In demo mode or when COUPLE_EMAIL is unset, grant couple access to everyone.
+  const [isCouple, setIsCouple] = useState(isDemoMode || !COUPLE_EMAIL);
+
+  useEffect(() => {
+    if (isDemoMode || !COUPLE_EMAIL) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setIsCouple(true);
+      return;
+    }
+    supabase.auth.getSession().then(({ data }) => {
+      const email = data?.session?.user?.email ?? "";
+      setIsCouple(email.toLowerCase() === COUPLE_EMAIL.toLowerCase());
+    });
+  }, [unlocked]);
+
   // Hash-based routing: "#pay" opens the public ang-bao QR page (no login needed).
   useEffect(() => {
     const onHashChange = () => setRoute(window.location.hash.replace(/^#\/?/, ""));
@@ -1060,6 +1082,26 @@ export default function WeddingTracker() {
       return true;
     } catch {
       showToast("Could not save wedding page — check connection");
+      return false;
+    }
+  };
+
+  const saveBudgetConfig = async ({ overall_budget_cap, budget_categories }) => {
+    if (isDemoMode) {
+      setWedding((w) => ({ ...(w || {}), overall_budget_cap, budget_categories }));
+      showToast("Budget settings saved");
+      return true;
+    }
+    try {
+      await sb.rpc("upsert_budget_config", {
+        p_overall_budget_cap: overall_budget_cap,
+        p_budget_categories: budget_categories,
+      });
+      await loadWedding();
+      showToast("Budget settings saved");
+      return true;
+    } catch {
+      showToast("Could not save budget settings — check connection");
       return false;
     }
   };
@@ -1620,6 +1662,11 @@ export default function WeddingTracker() {
               <button className={`view-tab ${view === "wishes-wrapped" ? "active" : ""}`} onClick={() => setView("wishes-wrapped")}>
                 ✨ Wishes Wrapped
               </button>
+              {isCouple && (
+                <button className={`view-tab ${view === "budget" ? "active" : ""}`} onClick={() => setView("budget")}>
+                  💰 Budget
+                </button>
+              )}
             </>
           ) : (
             <>
@@ -1865,6 +1912,13 @@ export default function WeddingTracker() {
             <WeddingPageTab wedding={wedding} onSave={saveWeddingPage} showToast={showToast} />
           ) : view === "wishes-wrapped" ? (
             <WishesWrappedTab guests={guests} wedding={wedding} />
+          ) : view === "budget" ? (
+            <BudgetTab
+              wedding={wedding}
+              onSaveBudget={saveBudgetConfig}
+              showToast={showToast}
+              isCouple={isCouple}
+            />
           ) : ANGBAO_ENABLED && view === "angbao" ? (
             /* ANGBAO VIEW */
             <>
