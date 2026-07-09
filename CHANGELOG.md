@@ -5,6 +5,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [2026-07-09] — fix/bugs-91-92-93-94-95 (#97)
+
+### Fixed
+
+- **#91 — PIN lockout no longer fires on transient errors** — only wrong-password responses (Supabase status 400 / "invalid credentials") burn an attempt; network/connection errors show a retry prompt without touching the counter.
+- **#92 — Role-based access enforced at the DB layer** — new migration (`0009_role_rls.sql`) adds `public.app_role()` (reads `user_metadata.app_role` from the JWT) and narrows RLS policies so helpers cannot INSERT/DELETE guests, write to `tables`, `weddings`, `submissions`, or `vendors`. The three write RPCs (`upsert_wedding_config`, `upsert_wedding_page`, `upsert_budget_config`) now raise `insufficient_privilege` for non-couple callers, closing the security-definer bypass gap. The app embeds the role into JWT user_metadata on every login and session restore.
+- **#93 — Guest-load error no longer blocks unrelated tabs** — Wedding Page, Wishes Wrapped, Budget, and Submissions tabs all render normally when the guest fetch fails, since they load their data independently.
+- **#94 — `saveEdit` no longer shows "RSVP updated" on failure** — `updateGuest` now returns `true`/`false`; `saveEdit` keeps the editor open on `false`. Same fix applied to `SeatingTab.generateSuggestion`, which had the same oversight.
+- **#95 — `.ics` calendar invite is now RFC 5545-compliant** — adds required `UID` (stable, derived from `wedding.id + date`) and `DTSTAMP` fields; sets `DTEND` to the day after `DTSTART` (exclusive, as the spec requires for all-day events).
+
+---
+
 ## [2026-07-09] — feat/budget-vendors (#96)
 
 ### Added
