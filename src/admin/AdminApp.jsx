@@ -16,6 +16,7 @@ import SeatingTab from "./SeatingTab.jsx";
 import WeddingSetupTab from "./WeddingSetupTab.jsx";
 import WeddingPageTab from "../wedding/WeddingPageTab.jsx";
 import WishesWrappedTab from "./WishesWrappedTab.jsx";
+import BudgetTab from "./BudgetTab.jsx";
 
 // ─── PAYNOW CONFIG ────────────────────────────────────────────────────────────
 // The host's PayNow-linked mobile number and display name. These are NOT secret
@@ -886,6 +887,8 @@ export default function WeddingTracker() {
       if (!data.session) return;
       const r = getRole(data.session.user.email);
       if (!r) { supabase.auth.signOut(); return; } // unrecognised account — fail closed
+      // No JWT app_role claim to sync: public.is_helper() enforces the split at the
+      // DB layer from the signed-in email (auth.email()) directly.
       setRole(r);
       if (r === "helper") setMode("dday");
       setUnlocked(true);
@@ -936,6 +939,8 @@ export default function WeddingTracker() {
         setPinError("Something went wrong — please try again");
       }
     } else {
+      // Role is enforced at the DB layer by public.is_helper(), which reads the
+      // signed-in email (auth.email()) directly — no JWT app_role claim to sync.
       setRole(selectedRole);
       if (selectedRole === "helper") setMode("dday");
       setUnlocked(true);
@@ -1015,7 +1020,16 @@ export default function WeddingTracker() {
     }
     try {
       const rows = await sb.rpc("get_wedding_config", {});
-      setWedding(Array.isArray(rows) && rows.length ? rows[0] : null);
+      const base = Array.isArray(rows) && rows.length ? rows[0] : null;
+      // Budget (cap + categories) is served by a separate authenticated,
+      // couple-only RPC so it never ships to anon via the public get_wedding_config.
+      // Merge it in when present; a helper (or un-migrated DB) simply gets no rows.
+      let budget = null;
+      try {
+        const brows = await sb.rpc("get_budget_config", {});
+        budget = Array.isArray(brows) && brows.length ? brows[0] : null;
+      } catch { /* RPC absent on un-migrated DBs, or caller is a helper — skip */ }
+      setWedding(base ? { ...base, ...(budget || {}) } : base);
     } catch {
       showToast("Failed to load wedding details");
     }
@@ -1236,6 +1250,26 @@ export default function WeddingTracker() {
       return true;
     } catch {
       showToast("Could not save wedding page — check connection");
+      return false;
+    }
+  };
+
+  const saveBudgetConfig = async ({ overall_budget_cap, budget_categories }) => {
+    if (isDemoMode) {
+      setWedding((w) => ({ ...(w || {}), overall_budget_cap, budget_categories }));
+      showToast("Budget settings saved");
+      return true;
+    }
+    try {
+      await sb.rpc("upsert_budget_config", {
+        p_overall_budget_cap: overall_budget_cap,
+        p_budget_categories: budget_categories,
+      });
+      await loadWedding();
+      showToast("Budget settings saved");
+      return true;
+    } catch {
+      showToast("Could not save budget settings — check connection");
       return false;
     }
   };
@@ -1818,6 +1852,11 @@ export default function WeddingTracker() {
               <button className={`view-tab ${view === "wishes-wrapped" ? "active" : ""}`} onClick={() => setView("wishes-wrapped")}>
                 ✨ Wishes Wrapped
               </button>
+              {role === "couple" && (
+                <button className={`view-tab ${view === "budget" ? "active" : ""}`} onClick={() => setView("budget")}>
+                  💰 Budget
+                </button>
+              )}
             </>
           ) : (
             <>
@@ -1904,9 +1943,10 @@ export default function WeddingTracker() {
 
           {loading ? (
             <div className="empty"><div className="empty-icon">⏳</div><div className="empty-text">Loading guests…</div></div>
-          ) : guestLoadError && guests.length === 0 && view !== "wedding-page" && view !== "wishes-wrapped" ? (
-            // Only block guest-dependent views. Wedding Page (renders from `wedding`)
-            // and Wishes Wrapped (degrades to its own empty state) don't need the list.
+          ) : guestLoadError && guests.length === 0 && view !== "wedding-page" && view !== "wishes-wrapped" && view !== "budget" && view !== "submissions" ? (
+            // Only block guest-dependent views. Wedding Page (renders from `wedding`),
+            // Wishes Wrapped (own empty state), Budget (vendors/config) and Submissions
+            // don't need the guest list, so a guest-load error shouldn't hide them.
             <div className="empty">
               <div className="empty-icon">⚠️</div>
               <div className="empty-text">Could not load guests</div>
@@ -2077,6 +2117,13 @@ export default function WeddingTracker() {
             <WeddingPageTab wedding={wedding} onSave={saveWeddingPage} showToast={showToast} />
           ) : view === "wishes-wrapped" ? (
             <WishesWrappedTab guests={guests} wedding={wedding} />
+          ) : view === "budget" ? (
+            <BudgetTab
+              wedding={wedding}
+              onSaveBudget={saveBudgetConfig}
+              showToast={showToast}
+              isCouple={role === "couple"}
+            />
           ) : ANGBAO_ENABLED && view === "angbao" ? (
             /* ANGBAO VIEW */
             <>
