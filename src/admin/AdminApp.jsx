@@ -878,10 +878,14 @@ export default function WeddingTracker() {
   // Restore an existing session on load (Supabase persists it in localStorage).
   useEffect(() => {
     if (isDemoMode) return;
-    supabase.auth.getSession().then(({ data }) => {
+    supabase.auth.getSession().then(async ({ data }) => {
       if (!data.session) return;
       const r = getRole(data.session.user.email);
       if (!r) { supabase.auth.signOut(); return; } // unrecognised account — fail closed
+      // Re-sync role claim if the cached JWT pre-dates the RLS migration.
+      if (data.session.user.user_metadata?.app_role !== r) {
+        await supabase.auth.updateUser({ data: { app_role: r } });
+      }
       setRole(r);
       if (r === "helper") setMode("dday");
       setUnlocked(true);
@@ -927,7 +931,8 @@ export default function WeddingTracker() {
       setAccessCode("");
     } else {
       // Embed role in JWT user_metadata so DB-level RLS policies can enforce it.
-      await supabase.auth.updateUser({ data: { app_role: selectedRole } });
+      const { error: roleError } = await supabase.auth.updateUser({ data: { app_role: selectedRole } });
+      if (roleError) showToast("Role sync failed — sign out and back in if features seem restricted");
       setRole(selectedRole);
       if (selectedRole === "helper") setMode("dday");
       setUnlocked(true);
@@ -1746,7 +1751,7 @@ export default function WeddingTracker() {
 
           {loading ? (
             <div className="empty"><div className="empty-icon">⏳</div><div className="empty-text">Loading guests…</div></div>
-          ) : guestLoadError && guests.length === 0 && view !== "wedding-page" && view !== "wishes-wrapped" && view !== "budget" ? (
+          ) : guestLoadError && guests.length === 0 && view !== "wedding-page" && view !== "wishes-wrapped" && view !== "budget" && view !== "submissions" ? (
             <div className="empty">
               <div className="empty-icon">⚠️</div>
               <div className="empty-text">Could not load guests</div>
