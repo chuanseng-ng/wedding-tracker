@@ -157,7 +157,9 @@ export default function BudgetSummaryCard({
     setEditingCap(true);
   };
   const saveCap = () => {
-    onEditCap(Number(capInput) || 0);
+    // Clamp to non-negative: min="0" is only a UI hint; a pasted/typed negative
+    // would otherwise persist ("-500" is truthy, so `|| 0` doesn't catch it).
+    onEditCap(Math.max(0, Number(capInput) || 0));
     setEditingCap(false);
   };
 

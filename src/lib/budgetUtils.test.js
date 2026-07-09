@@ -5,6 +5,7 @@ import {
   computeVendorMilestones,
   computeCategoryStats,
   computeOverallStats,
+  localDateISO,
 } from "./budgetUtils.js";
 
 const TODAY = "2026-07-08";
@@ -219,5 +220,24 @@ describe("computeOverallStats", () => {
     const r = computeOverallStats(5000, vendors);
     expect(r.totalPaid).toBe(500);
     expect(r.totalCommitted).toBe(1000);
+  });
+});
+
+describe("localDateISO", () => {
+  it("formats a date as YYYY-MM-DD from LOCAL components (not UTC)", () => {
+    // Constructed from local components, so the output is TZ-independent here.
+    expect(localDateISO(new Date(2026, 6, 9))).toBe("2026-07-09");
+  });
+
+  it("zero-pads single-digit month and day", () => {
+    expect(localDateISO(new Date(2026, 0, 5))).toBe("2026-01-05");
+  });
+
+  it("overdue detection uses the local date when todayISO is omitted", () => {
+    // A milestone due 'today' (local) must not be flagged overdue, even if the
+    // machine's UTC date has already rolled over to tomorrow.
+    const today = localDateISO();
+    const r = computeVendorMilestones([{ amount: 100, paid: false, due_date: today }]);
+    expect(r.overdueCount).toBe(0);
   });
 });

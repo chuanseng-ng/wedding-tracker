@@ -45,6 +45,7 @@ let demoNextId = 1;
 export default function BudgetTab({ wedding, onSaveBudget, showToast, isCouple }) {
   const [vendors, setVendors] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [vendorLoadError, setVendorLoadError] = useState(false);
   const [vendorModal, setVendorModal] = useState(null); // { mode: 'add'|'edit', vendor?, categoryKey? }
   const [catModal, setCatModal] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(null); // vendor to delete
@@ -61,8 +62,10 @@ export default function BudgetTab({ wedding, onSaveBudget, showToast, isCouple }
     try {
       const data = await sb.listVendors();
       setVendors(data || []);
+      setVendorLoadError(false);
     } catch {
       showToast("Failed to load vendors");
+      setVendorLoadError(true);
     }
     setLoading(false);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -162,6 +165,22 @@ export default function BudgetTab({ wedding, onSaveBudget, showToast, isCouple }
       <div className="empty">
         <div className="empty-icon">⏳</div>
         <div className="empty-text">Loading budget…</div>
+      </div>
+    );
+  }
+
+  // Distinguish a real load failure from a genuinely empty vendor list, so a
+  // connectivity blip doesn't masquerade as "no vendors yet" (mirrors AdminApp's
+  // guestLoadError retry state).
+  if (vendorLoadError && vendors.length === 0) {
+    return (
+      <div className="empty">
+        <div className="empty-icon">⚠️</div>
+        <div className="empty-text">Could not load vendors</div>
+        <div className="empty-sub">
+          Check your connection, then{" "}
+          <button className="btn btn-outline btn-sm" style={{ marginLeft: 8 }} onClick={loadVendors}>Retry</button>
+        </div>
       </div>
     );
   }

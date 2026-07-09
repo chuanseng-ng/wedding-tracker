@@ -22,12 +22,20 @@ export function vendorPaid(vendor) {
     .reduce((s, m) => s + (Number(m.amount) || 0), 0);
 }
 
+/** Today's date as YYYY-MM-DD in the caller's LOCAL timezone (not UTC). */
+export function localDateISO(d = new Date()) {
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 /**
  * Derive display fields for a single vendor's milestone list.
  * Pass todayISO (YYYY-MM-DD) to make overdue detection deterministic in tests.
  */
 export function computeVendorMilestones(milestones, todayISO) {
-  const today = todayISO ?? new Date().toISOString().slice(0, 10);
+  // Default to the caller's LOCAL date, not UTC — `toISOString()` would flag
+  // milestones overdue a day early (or late) in timezones offset from UTC.
+  const today = todayISO ?? localDateISO();
   const total = milestones.reduce((s, m) => s + (Number(m.amount) || 0), 0);
   const paid  = milestones
     .filter((m) => m.paid)

@@ -1020,7 +1020,16 @@ export default function WeddingTracker() {
     }
     try {
       const rows = await sb.rpc("get_wedding_config", {});
-      setWedding(Array.isArray(rows) && rows.length ? rows[0] : null);
+      const base = Array.isArray(rows) && rows.length ? rows[0] : null;
+      // Budget (cap + categories) is served by a separate authenticated,
+      // couple-only RPC so it never ships to anon via the public get_wedding_config.
+      // Merge it in when present; a helper (or un-migrated DB) simply gets no rows.
+      let budget = null;
+      try {
+        const brows = await sb.rpc("get_budget_config", {});
+        budget = Array.isArray(brows) && brows.length ? brows[0] : null;
+      } catch { /* RPC absent on un-migrated DBs, or caller is a helper — skip */ }
+      setWedding(base ? { ...base, ...(budget || {}) } : base);
     } catch {
       showToast("Failed to load wedding details");
     }

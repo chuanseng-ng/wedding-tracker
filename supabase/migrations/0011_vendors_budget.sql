@@ -1,7 +1,8 @@
 -- 0011_vendors_budget.sql — Budget categories, overall cap, and vendor management
 -- Adds two columns to the weddings singleton, creates the vendors table with RLS,
--- recreates get_wedding_config with new budget columns, and adds a dedicated
--- upsert_budget_config RPC. Idempotent — safe to re-run.
+-- keeps get_wedding_config budget-free (anon-callable) and serves budget via a
+-- separate authenticated, couple-only get_budget_config, and adds a couple-only
+-- upsert_budget_config write RPC. Idempotent — safe to re-run.
 --
 -- Ported from upstream (originally 0008_vendors_budget.sql). Renumbered to 0011 so
 -- it runs AFTER the fork's 0010_role_enforcement.sql — this migration reuses that
@@ -114,14 +115,16 @@ drop policy if exists "vendors_delete" on public.vendors;
 create policy "vendors_delete" on public.vendors
   for delete to authenticated using (not (select public.is_helper()));
 
--- ── 6. Recreate get_wedding_config (UNION of fork + budget columns) ───────────
+-- ── 6. Recreate get_wedding_config (fork columns; budget-free) ────────────────
 -- Must drop the prior version first (Postgres requires an exact signature match).
 --
--- CRITICAL: both the fork (0009_smart_rsvp) and upstream recreated this function
--- with DIFFERENT extra columns. This definition runs last and wins, so it must be
--- the UNION of both, or reads silently break:
---   • fork adds  hero_focal_point (#75), enable_smart_rsvp + primary_meal_event_id (#78)
---   • upstream adds  overall_budget_cap + budget_categories (#96)
+-- This function is granted to `anon` (the public RSVP form calls it), so it must
+-- expose ONLY public display config. It carries the fork's extra columns
+-- (hero_focal_point #75, enable_smart_rsvp + primary_meal_event_id #78) but
+-- DELIBERATELY omits the budget fields (overall_budget_cap / budget_categories):
+-- those are internal financial data and are served instead by the authenticated,
+-- couple-only get_budget_config() below (§6b). Upstream folded budget into this
+-- public RPC, which leaked it to anon — this migration splits them back apart.
 -- Column order in the return table MUST match the select list below.
 
 drop function if exists public.get_wedding_config();
@@ -155,9 +158,7 @@ returns table (
   theme_tokens            jsonb,
   section_photos          jsonb,
   enable_smart_rsvp       boolean,
-  primary_meal_event_id   uuid,
-  overall_budget_cap      numeric,
-  budget_categories       jsonb
+  primary_meal_event_id   uuid
 )
 language sql
 security definer
@@ -191,14 +192,37 @@ as $$
     coalesce(theme_tokens, '{}'::jsonb),
     coalesce(section_photos, '{}'::jsonb),
     coalesce(enable_smart_rsvp, false),
-    primary_meal_event_id,
-    coalesce(overall_budget_cap, 0),
-    coalesce(budget_categories, '[]'::jsonb)
+    primary_meal_event_id
   from public.weddings
   limit 1;
 $$;
 
 grant execute on function public.get_wedding_config() to anon, authenticated;
+
+-- ── 6b. get_budget_config — authenticated, couple-only budget read ────────────
+-- The admin Budget tab reads the couple's cap + category allocations here instead
+-- of via get_wedding_config, so anon never receives budget data. Gated to the
+-- couple (is_helper() → no rows) to match the couple-only vendor/weddings writes.
+drop function if exists public.get_budget_config();
+
+create or replace function public.get_budget_config()
+returns table (
+  overall_budget_cap numeric,
+  budget_categories  jsonb
+)
+language sql
+security definer
+set search_path = public
+as $$
+  select
+    coalesce(overall_budget_cap, 0),
+    coalesce(budget_categories, '[]'::jsonb)
+  from public.weddings
+  where not (select public.is_helper())
+  limit 1;
+$$;
+
+grant execute on function public.get_budget_config() to authenticated;
 
 -- ── 7. Dedicated budget-config write RPC ─────────────────────────────────────
 -- Separate from upsert_wedding_config so saving budget caps never risks
@@ -214,6 +238,13 @@ security definer
 set search_path = public
 as $$
 begin
+  -- security definer bypasses RLS, so the couple-only gate must be enforced here
+  -- too — otherwise a helper could call this RPC directly and mutate the budget,
+  -- defeating the `not is_helper()` write policies on vendors/weddings.
+  if (select public.is_helper()) then
+    raise exception 'insufficient_privilege' using errcode = '42501';
+  end if;
+
   insert into public.weddings (
     bride_name, groom_name,
     overall_budget_cap, budget_categories,
@@ -234,18 +265,22 @@ $$;
 -- Authenticated only — budget data is internal, not public.
 grant execute on function public.upsert_budget_config(numeric, jsonb) to authenticated;
 
--- ── 8. Harden weddings writes to couple-only ─────────────────────────────────
+-- ── 8. Harden weddings access ────────────────────────────────────────────────
 -- 0004 created a single "public" policy `for all using (true)` that let ANYONE —
--- including anon and the helper — write the weddings singleton (love story, venue,
--- budget caps, …). The fork's 0010 role enforcement never touched this table, so it
--- was still open. Split it: reads stay open (the public WeddingPage + anon-callable
--- get_wedding_config need it) but writes require the couple (not is_helper()).
+-- including anon and the helper — read AND write the weddings singleton (love
+-- story, venue, and now the budget cap/categories added in §1). The fork's 0010
+-- role enforcement never touched this table, so it was still wide open. Split it:
+--   • SELECT → authenticated only. The public pages never read this table directly
+--     (verified: RsvpPage/WeddingPage go through the anon-granted security-definer
+--     RPCs get_wedding_config / get_public_wedding, which bypass RLS), so removing
+--     the anon read closes the budget-to-anon leak without breaking the public site.
+--   • writes → couple only (not is_helper()).
 -- The security-definer upsert_* RPCs bypass RLS, so admin saves are unaffected.
 drop policy if exists "public" on public.weddings;
 
 drop policy if exists "weddings_select" on public.weddings;
 create policy "weddings_select" on public.weddings
-  for select using (true);
+  for select to authenticated using (true);
 
 drop policy if exists "weddings_write" on public.weddings;
 create policy "weddings_write" on public.weddings
