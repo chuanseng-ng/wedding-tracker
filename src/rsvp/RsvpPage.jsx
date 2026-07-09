@@ -253,6 +253,12 @@ function buildIcsDataUrl(wedding) {
   const [y, m, d] = wedding.wedding_date.split("-").map(Number);
   const pad = (n) => String(n).padStart(2, "0");
   const dateStr = `${y}${pad(m)}${pad(d)}`;
+  // RFC 5545: DTEND for all-day events is exclusive, so next day
+  const dtEnd = new Date(Date.UTC(y, m - 1, d + 1));
+  const dtEndStr = `${dtEnd.getUTCFullYear()}${pad(dtEnd.getUTCMonth() + 1)}${pad(dtEnd.getUTCDate())}`;
+  const now = new Date();
+  const dtstamp = `${now.getUTCFullYear()}${pad(now.getUTCMonth() + 1)}${pad(now.getUTCDate())}T${pad(now.getUTCHours())}${pad(now.getUTCMinutes())}${pad(now.getUTCSeconds())}Z`;
+  const uid = `wedding-${wedding.id || "event"}-${dateStr}@weddingtracker`;
   const summary = wedding.bride_name && wedding.groom_name
     ? `${wedding.bride_name} & ${wedding.groom_name}'s Wedding`
     : "Wedding";
@@ -262,8 +268,10 @@ function buildIcsDataUrl(wedding) {
     "VERSION:2.0",
     "PRODID:-//WeddingTracker//EN",
     "BEGIN:VEVENT",
+    `UID:${uid}`,
+    `DTSTAMP:${dtstamp}`,
     `DTSTART;VALUE=DATE:${dateStr}`,
-    `DTEND;VALUE=DATE:${dateStr}`,
+    `DTEND;VALUE=DATE:${dtEndStr}`,
     `SUMMARY:${summary}`,
     location ? `LOCATION:${location}` : "",
     "END:VEVENT",

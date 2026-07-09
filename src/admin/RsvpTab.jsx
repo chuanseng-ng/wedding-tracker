@@ -142,7 +142,8 @@ export default function RsvpTab({ guests, onUpdate, onDelete, showToast }) {
     }
     setSavingId(g.id);
     try {
-      await onUpdate(g.id, patch);
+      const ok = await onUpdate(g.id, patch);
+      if (ok === false) return;
       setEditingId(null);
       showToast("RSVP updated");
     } finally {

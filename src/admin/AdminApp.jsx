@@ -900,21 +900,34 @@ export default function WeddingTracker() {
     const { error } = await supabase.auth.signInWithPassword({ email, password: accessCode });
     setUnlocking(false);
     if (error) {
-      const newCount = pinFailCount + 1;
-      setPinFailCount(newCount);
       const isRateLimited =
         error.message?.toLowerCase().includes("too many") ||
-        error.message?.toLowerCase().includes("rate") ||
-        newCount >= 3;
+        error.message?.toLowerCase().includes("rate");
+      const isWrongPassword =
+        error.status === 400 ||
+        error.message?.toLowerCase().includes("invalid") ||
+        error.message?.toLowerCase().includes("credentials");
       if (isRateLimited) {
         setPinError("Too many attempts — wait 60 seconds before trying again");
         setPinLocked(true);
         setTimeout(() => { setPinLocked(false); setPinFailCount(0); setPinError(""); }, 60_000);
+      } else if (isWrongPassword) {
+        const newCount = pinFailCount + 1;
+        setPinFailCount(newCount);
+        if (newCount >= 3) {
+          setPinError("Too many attempts — wait 60 seconds before trying again");
+          setPinLocked(true);
+          setTimeout(() => { setPinLocked(false); setPinFailCount(0); setPinError(""); }, 60_000);
+        } else {
+          setPinError("Incorrect access code, try again");
+        }
       } else {
-        setPinError("Incorrect access code, try again");
+        setPinError("Connection error — please try again");
       }
       setAccessCode("");
     } else {
+      // Embed role in JWT user_metadata so DB-level RLS policies can enforce it.
+      await supabase.auth.updateUser({ data: { app_role: selectedRole } });
       setRole(selectedRole);
       if (selectedRole === "helper") setMode("dday");
       setUnlocked(true);
@@ -1198,9 +1211,10 @@ export default function WeddingTracker() {
   const updateGuest = async (id, patch) => {
     setGuests((g) => g.map((x) => (x.id === id ? { ...x, ...patch } : x)));
     if (!isDemoMode) {
-      try { await sb.update("guests", id, patch); }
-      catch { showToast("Not saved — check connection"); }
+      try { await sb.update("guests", id, patch); return true; }
+      catch { showToast("Not saved — check connection"); return false; }
     }
+    return true;
   };
 
   // Update angbao amount. Optimistic locally + debounced persist (~400ms) so a
@@ -1732,7 +1746,7 @@ export default function WeddingTracker() {
 
           {loading ? (
             <div className="empty"><div className="empty-icon">⏳</div><div className="empty-text">Loading guests…</div></div>
-          ) : guestLoadError && guests.length === 0 ? (
+          ) : guestLoadError && guests.length === 0 && view !== "wedding-page" && view !== "wishes-wrapped" && view !== "budget" ? (
             <div className="empty">
               <div className="empty-icon">⚠️</div>
               <div className="empty-text">Could not load guests</div>
