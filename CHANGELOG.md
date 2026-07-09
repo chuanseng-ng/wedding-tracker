@@ -5,6 +5,49 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [2026-07-09] — fix/bugs-91-92-93-94-95 (#97)
+
+### Fixed
+
+- **#91 — PIN lockout no longer fires on transient errors** — only wrong-password responses (Supabase status 400 / "invalid credentials") burn an attempt; network/connection errors show a retry prompt without touching the counter.
+- **#92 — Role-based access enforced at the DB layer** — new migration (`0009_role_rls.sql`) adds `public.app_role()` (reads `user_metadata.app_role` from the JWT) and narrows RLS policies so helpers cannot INSERT/DELETE guests, write to `tables`, `weddings`, `submissions`, or `vendors`. The three write RPCs (`upsert_wedding_config`, `upsert_wedding_page`, `upsert_budget_config`) now raise `insufficient_privilege` for non-couple callers, closing the security-definer bypass gap. The app embeds the role into JWT user_metadata on every login and session restore.
+- **#93 — Guest-load error no longer blocks unrelated tabs** — Wedding Page, Wishes Wrapped, Budget, and Submissions tabs all render normally when the guest fetch fails, since they load their data independently.
+- **#94 — `saveEdit` no longer shows "RSVP updated" on failure** — `updateGuest` now returns `true`/`false`; `saveEdit` keeps the editor open on `false`. Same fix applied to `SeatingTab.generateSuggestion`, which had the same oversight.
+- **#95 — `.ics` calendar invite is now RFC 5545-compliant** — adds required `UID` (stable, derived from `wedding.id + date`) and `DTSTAMP` fields; sets `DTEND` to the day after `DTSTART` (exclusive, as the spec requires for all-day events).
+
+---
+
+## [2026-07-09] — feat/budget-vendors (#96)
+
+### Added
+
+- **Budget & Vendors tab** (couple-only) — new admin tab for tracking wedding vendors and spend; hidden from bridal team helpers.
+- **Vendor management** — add, edit, and delete vendors per category. Fields: company name, contact person, phone, email, website, notes, contract total, status, payment milestones, and D-Day arrival time.
+- **Two vendor statuses** — *Enquiring* (exploring/not committed; contributes $0 to budget totals) and *Booked* (confirmed; `quoted_price` counts toward committed spend).
+- **Contract total field** — direct dollar input for the agreed vendor price, separate from milestone payment tracking.
+- **Payment milestones** — optional breakdown of how a contract is paid in instalments, each with label, amount, due date, and paid checkbox. Overdue milestones are flagged in red.
+- **Fully Paid checkbox** — overrides milestone totals; marks vendor as fully settled (paid = quoted_price) without requiring individual milestone ticks.
+- **Budget summary card** — three-segment progress bar (paid · to pay · available) against the overall cap, plus a category planning section showing total allocated across category caps vs the overall budget.
+- **13 default budget categories** — Venue, Photography/Videography, Live Band/DJ, Gown Rental, Pre-wedding Shoot, Florist/Decor, Catering, Emcee, Hair & Makeup, Wedding Cake, Invitations/Stationery, Transport, Miscellaneous; couple can rename, reorder, add, or remove.
+- **Per-category budget caps** — optional cap per category; bars turn amber >80% and red when exceeded.
+- **D-Day arrival time** — per-vendor field for day-of logistics, collapsed by default in the modal to reduce cognitive load.
+- **`vendors` table with RLS**, `upsert_budget_config` RPC, and updated `get_wedding_config` returning `overall_budget_cap` and `budget_categories` (`0008_vendors_budget.sql`).
+- **239 unit tests** covering `vendorCommitted`, `vendorPaid`, `computeVendorMilestones`, `computeCategoryStats`, `computeOverallStats` (`src/lib/budgetUtils.test.js`).
+
+### Fixed
+
+- Migration constraint order corrected: `DROP CONSTRAINT` now runs before `UPDATE status` so existing rows don't violate the old check on re-run.
+- Vendor modal stays open on a failed save — user can retry without losing edits.
+- `setSaving` wrapped in `try/finally` in VendorModal and CategoryManagerModal — Save button can never get permanently stuck.
+- `totalToPayOut` clamped to `Math.max(0, …)` — prevents negative bar segment when an enquiring vendor has `is_fully_paid` set.
+- Polling interval no longer restarts on every AdminApp re-render (`showToast` removed from `loadVendors` dependency array).
+- Default category seeding now depends on `isCouple` alongside `wedding?.id` — seeds correctly when role resolves after the wedding row loads.
+- Overdue milestone warning suppressed when `is_fully_paid` is true — no more contradictory "Fully paid" + overdue badges on the same card.
+- Blank-label category rows show a skip count toast instead of being silently discarded.
+- Milestone rows use stable `crypto.randomUUID()` keys on add — deleting a middle row no longer reuses the wrong DOM node.
+
+---
+
 ## [2026-07-08] — feat/role-based-access (#89)
 
 ### Added
