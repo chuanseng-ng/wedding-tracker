@@ -15,6 +15,8 @@ export default {
   "wedding.inviteTag": "✦ {groom} & {bride} 诚挚邀请您 ✦",
   "wedding.inviteTagFallback": "— — — 诚挚邀请您 — — —",
   "wedding.rsvpNow": "立即回复",
+  "wedding.loading": "正在加载婚礼页面",
+  "wedding.rsvpHint": "使用请柬中的专属链接，体验更快捷",
 
   "wedding.countdown.today": "就是今天！🎊",
   "wedding.countdown.toGo_one": "还有 {n} 天",
@@ -59,6 +61,7 @@ export default {
   "rsvp.invited": "诚挚邀请您",
   "rsvp.eyebrow": "婚礼回复",
   "rsvp.loading": "正在加载您的资料…",
+  "rsvp.configError": "无法加载活动详情，请尝试刷新。",
   "rsvp.demoBadge": "演示模式",
 
   "rsvp.name.label": "您的全名",
@@ -74,6 +77,11 @@ export default {
   "rsvp.attending.q": "您会出席吗？",
   "rsvp.attending.yes": "✓ 会，我一定到！",
   "rsvp.attending.no": "✗ 抱歉，我无法出席",
+
+  "rsvp.smart.title": "您会参加哪些活动？",
+  "rsvp.smart.hint": "请为同行的每位宾客告诉我们。",
+  "rsvp.smart.you": "您",
+
 
   "rsvp.rel.q": "您与新人是什么关系？",
   "rsvp.friend.q": "是哪一类朋友？",
@@ -125,14 +133,17 @@ export default {
   "rsvp.friend.secret": "😏 这是秘密",
 
   "rsvp.confirm.coupleFallback": "新人",
+  "rsvp.confirm.eventTitleFallback": "婚礼",
   "rsvp.confirm.seeYou": "到时见！",
   "rsvp.confirm.miss": "我们会想念您！",
   "rsvp.confirm.yesMsg": "您的回复已确认。{couple} 迫不及待想与您一同庆祝。",
   "rsvp.confirm.noMsg": "感谢您的告知。{couple} 会想念您。",
+  "rsvp.confirm.addToCalendar": "添加到日历",
 
   "rsvp.err.nameSelect": "请在上方输入您的名字并从列表中选择。",
   "rsvp.err.nameEnter": "请输入您的名字。",
   "rsvp.err.attendingSelect": "请选择您是否出席。",
+  "rsvp.err.answerAllEvents": "请为每项活动选择是否出席。",
   "rsvp.err.emailInvalid": "请输入有效的电子邮箱地址。",
   "rsvp.err.notSetup": "回复功能尚未设置 — 数据库尚未完成迁移，请联系新人。",
   "rsvp.err.linkExpired": "您的回复链接已失效，请联系新人获取新链接。",

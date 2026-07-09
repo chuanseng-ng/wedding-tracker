@@ -2,10 +2,13 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { buildPayNowPayload, normalizeMobile } from "../paynow";
 import { sb, isDemoMode, supabase, COUPLE_EMAIL, HELPER_EMAIL, getRole } from "../lib/supabase.js";
+import { applyCheckin } from "../lib/checkin.js";
 import { cleanName, cleanNotes, cleanTable, cleanParty, cleanAmount, MAX_ANGBAO } from "../lib/validation.js";
 import { parseCSV, toCSV, guestImportTemplateCSV } from "../lib/csv.js";
 import { formatTime } from "../lib/format.js";
 import { guestMatchesSearch } from "../lib/guestSearch.js";
+import { diffEvents } from "../lib/eventDiff.js";
+import { seedInviteRow } from "../lib/eventTargeting.js";
 import { Icon } from "../shared/icons.jsx";
 import { theme } from "../shared/theme.js";
 import RsvpTab from "./RsvpTab.jsx";
@@ -854,6 +857,8 @@ export default function WeddingTracker() {
   const [approveSearch, setApproveSearch] = useState("");
   const [approveAmount, setApproveAmount] = useState("");
   const [wedding, setWedding] = useState(undefined); // undefined = not fetched, null = no row yet, object = configured
+  const [weddingEvents, setWeddingEvents] = useState([]); // smart-RSVP event list (#78)
+  const [eventRsvps, setEventRsvps] = useState([]); // guest_event_rsvps rows for the targeting grid (#78)
   const [setupOpen, setSetupOpen] = useState(false);
   const [pendingDelete, setPendingDelete] = useState(null);
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
@@ -878,14 +883,12 @@ export default function WeddingTracker() {
   // Restore an existing session on load (Supabase persists it in localStorage).
   useEffect(() => {
     if (isDemoMode) return;
-    supabase.auth.getSession().then(async ({ data }) => {
+    supabase.auth.getSession().then(({ data }) => {
       if (!data.session) return;
       const r = getRole(data.session.user.email);
       if (!r) { supabase.auth.signOut(); return; } // unrecognised account — fail closed
-      // Re-sync role claim if the cached JWT pre-dates the RLS migration.
-      if (data.session.user.user_metadata?.app_role !== r) {
-        await supabase.auth.updateUser({ data: { app_role: r } });
-      }
+      // No JWT app_role claim to sync: public.is_helper() enforces the split at the
+      // DB layer from the signed-in email (auth.email()) directly.
       setRole(r);
       if (r === "helper") setMode("dday");
       setUnlocked(true);
@@ -904,18 +907,23 @@ export default function WeddingTracker() {
     const { error } = await supabase.auth.signInWithPassword({ email, password: accessCode });
     setUnlocking(false);
     if (error) {
+      // Only genuine wrong-code rejections should burn toward the lockout.
+      // Transient failures (network blips, outages) must not lock out a helper
+      // who typed the correct code; server rate-limits pause without counting.
+      const msg = error.message?.toLowerCase() || "";
       const isRateLimited =
-        error.message?.toLowerCase().includes("too many") ||
-        error.message?.toLowerCase().includes("rate");
-      const isWrongPassword =
-        error.status === 400 ||
-        error.message?.toLowerCase().includes("invalid") ||
-        error.message?.toLowerCase().includes("credentials");
+        error.status === 429 || msg.includes("too many") || msg.includes("rate");
+      const isInvalidCredential =
+        error.code === "invalid_credentials" ||
+        msg.includes("invalid login credentials") ||
+        msg.includes("invalid credentials");
       if (isRateLimited) {
+        // Throttled by the server — cool down but don't count it as a bad code.
         setPinError("Too many attempts — wait 60 seconds before trying again");
         setPinLocked(true);
         setTimeout(() => { setPinLocked(false); setPinFailCount(0); setPinError(""); }, 60_000);
-      } else if (isWrongPassword) {
+        setAccessCode("");
+      } else if (isInvalidCredential) {
         const newCount = pinFailCount + 1;
         setPinFailCount(newCount);
         if (newCount >= 3) {
@@ -925,14 +933,14 @@ export default function WeddingTracker() {
         } else {
           setPinError("Incorrect access code, try again");
         }
+        setAccessCode("");
       } else {
-        setPinError("Connection error — please try again");
+        // Transient/network error — let them retry without penalty or retyping.
+        setPinError("Something went wrong — please try again");
       }
-      setAccessCode("");
     } else {
-      // Embed role in JWT user_metadata so DB-level RLS policies can enforce it.
-      const { error: roleError } = await supabase.auth.updateUser({ data: { app_role: selectedRole } });
-      if (roleError) showToast("Role sync failed — sign out and back in if features seem restricted");
+      // Role is enforced at the DB layer by public.is_helper(), which reads the
+      // signed-in email (auth.email()) directly — no JWT app_role claim to sync.
       setRole(selectedRole);
       if (selectedRole === "helper") setMode("dday");
       setUnlocked(true);
@@ -1012,16 +1020,53 @@ export default function WeddingTracker() {
     }
     try {
       const rows = await sb.rpc("get_wedding_config", {});
-      setWedding(Array.isArray(rows) && rows.length ? rows[0] : null);
+      const base = Array.isArray(rows) && rows.length ? rows[0] : null;
+      // Budget (cap + categories) is served by a separate authenticated,
+      // couple-only RPC so it never ships to anon via the public get_wedding_config.
+      // Merge it in when present; a helper (or un-migrated DB) simply gets no rows.
+      let budget = null;
+      try {
+        const brows = await sb.rpc("get_budget_config", {});
+        budget = Array.isArray(brows) && brows.length ? brows[0] : null;
+      } catch { /* RPC absent on un-migrated DBs, or caller is a helper — skip */ }
+      setWedding(base ? { ...base, ...(budget || {}) } : base);
     } catch {
       showToast("Failed to load wedding details");
+    }
+  }, []);
+
+  const loadEvents = useCallback(async () => {
+    if (isDemoMode) return; // demo events are edited locally, not persisted
+    try {
+      const rows = await sb.select("wedding_events");
+      const sorted = [...rows].sort(
+        (a, b) => (a.sort_order - b.sort_order) || String(a.start_time || "").localeCompare(String(b.start_time || ""))
+      );
+      setWeddingEvents(sorted);
+    } catch {
+      /* table may not exist yet on un-migrated DBs — leave events empty */
+    }
+  }, []);
+
+  const loadEventRsvps = useCallback(async () => {
+    if (isDemoMode) return;
+    try {
+      const { data, error } = await supabase
+        .from("guest_event_rsvps")
+        .select("guest_id, event_id, invited, status, meal_choice");
+      if (error) throw error;
+      setEventRsvps(Array.isArray(data) ? data : []);
+    } catch {
+      /* table may not exist yet on un-migrated DBs — leave empty */
     }
   }, []);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadWedding();
-  }, [loadWedding]);
+    loadEvents();
+    loadEventRsvps();
+  }, [loadWedding, loadEvents, loadEventRsvps]);
 
   const saveWedding = async (form) => {
     if (isDemoMode) {
@@ -1039,6 +1084,8 @@ export default function WeddingTracker() {
         p_ceremony_time: form.ceremony_time,
         p_dinner_time: form.dinner_time,
         p_tea_ceremony_time: form.tea_ceremony_time || null,
+        p_enable_smart_rsvp: !!form.enable_smart_rsvp,
+        p_primary_meal_event_id: form.primary_meal_event_id || null,
       });
       await loadWedding();
       showToast("Wedding details saved");
@@ -1046,6 +1093,129 @@ export default function WeddingTracker() {
     } catch {
       showToast("Could not save wedding details — check connection");
       return false;
+    }
+  };
+
+  // Batch-persist the smart-RSVP event list edited in Wedding Setup (#78).
+  const saveEvents = async (draft) => {
+    const { toCreate, toUpdate, toDelete } = diffEvents(weddingEvents, draft);
+    if (isDemoMode) {
+      // Demo mode has no backend — reflect the edited list locally with stable ids.
+      setWeddingEvents(draft.filter((e) => String(e.name || "").trim())
+        .map((e, i) => ({ ...e, id: e.id || `demo_${i}`, sort_order: i })));
+      showToast("Events saved");
+      return true;
+    }
+    if (!wedding?.id) {
+      showToast("Save your wedding details first, then add events");
+      return false;
+    }
+    try {
+      for (const id of toDelete) await sb.delete("wedding_events", id);
+      for (const { id, patch } of toUpdate) await sb.update("wedding_events", id, patch);
+      for (const row of toCreate) await sb.insert("wedding_events", { ...row, wedding_id: wedding.id });
+      await loadEvents();
+      showToast("Events saved");
+      return true;
+    } catch {
+      showToast("Could not save events — check connection");
+      return false;
+    }
+  };
+
+  // Per-guest event targeting (#78, Phase 4) — writes guest_event_rsvps.invited.
+  // guest_event_rsvps has a composite PK, so the generic sb.update/delete (which
+  // key on `id`) don't apply; go through supabase directly.
+  const applyInvite = async (guest, eventId, invited) => {
+    const existing = eventRsvps.find((r) => r.guest_id === guest.id && r.event_id === eventId);
+    if (!invited) {
+      // Un-invite keeps the row (reversible) and just clears eligibility.
+      const { error } = await supabase.from("guest_event_rsvps")
+        .update({ invited: false }).eq("guest_id", guest.id).eq("event_id", eventId);
+      if (error) throw error;
+    } else if (existing) {
+      const { error } = await supabase.from("guest_event_rsvps")
+        .update({ invited: true }).eq("guest_id", guest.id).eq("event_id", eventId);
+      if (error) throw error;
+    } else {
+      // First enrollment: seed status/meal from the guest's legacy RSVP so the
+      // mirror trigger doesn't regress an already-answered guest to pending.
+      const { error } = await supabase.from("guest_event_rsvps").insert({
+        guest_id: guest.id,
+        event_id: eventId,
+        ...seedInviteRow(guest, eventId, wedding?.primary_meal_event_id || null),
+      });
+      if (error) throw error;
+    }
+  };
+
+  const setGuestInvited = async (guest, eventId, invited) => {
+    if (isDemoMode) {
+      setEventRsvps((prev) => [
+        ...prev.filter((r) => !(r.guest_id === guest.id && r.event_id === eventId)),
+        { guest_id: guest.id, event_id: eventId, invited, status: "pending" },
+      ]);
+      return;
+    }
+    try {
+      await applyInvite(guest, eventId, invited);
+      await loadEventRsvps();
+    } catch {
+      showToast("Could not update invitation — check connection");
+    }
+  };
+
+  const bulkInvite = async (guestList, eventId, invited) => {
+    if (isDemoMode) {
+      const ids = new Set(guestList.map((g) => g.id));
+      setEventRsvps((prev) => [
+        ...prev.filter((r) => !(r.event_id === eventId && ids.has(r.guest_id))),
+        ...guestList.map((g) => ({ guest_id: g.id, event_id: eventId, invited, status: "pending" })),
+      ]);
+      showToast(`${invited ? "Invited" : "Removed"} ${guestList.length}`);
+      return;
+    }
+    try {
+      for (const g of guestList) await applyInvite(g, eventId, invited);
+      await loadEventRsvps();
+      showToast(`${invited ? "Invited" : "Removed"} ${guestList.length} guest${guestList.length !== 1 ? "s" : ""}`);
+    } catch {
+      showToast("Could not update invitations — check connection");
+    }
+  };
+
+  // Manual per-event attendance logging (#78, Phase 6) — the issue's fallback.
+  // Upserts the guest_event_rsvps row (a plus-one may not have one yet for an
+  // inherited event); the mirror trigger keeps the legacy guests columns in sync.
+  // `patch` is { status } and/or { meal_choice }. responded_at is only stamped
+  // for a real answer (confirmed/declined) and cleared when reset to pending.
+  const setEventResponse = async (guest, eventId, patch) => {
+    const stamp = patch.status === "pending" ? { responded_at: null }
+      : (patch.status === "confirmed" || patch.status === "declined") ? { responded_at: new Date().toISOString() }
+      : {};
+    if (isDemoMode) {
+      setEventRsvps((prev) => {
+        const exists = prev.some((r) => r.guest_id === guest.id && r.event_id === eventId);
+        if (exists) return prev.map((r) => r.guest_id === guest.id && r.event_id === eventId ? { ...r, ...patch } : r);
+        return [...prev, { guest_id: guest.id, event_id: eventId, invited: true, status: "pending", meal_choice: "", ...patch }];
+      });
+      return;
+    }
+    try {
+      const exists = eventRsvps.some((r) => r.guest_id === guest.id && r.event_id === eventId);
+      if (exists) {
+        const { error } = await supabase.from("guest_event_rsvps")
+          .update({ ...patch, ...stamp })
+          .eq("guest_id", guest.id).eq("event_id", eventId);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("guest_event_rsvps")
+          .insert({ guest_id: guest.id, event_id: eventId, invited: true, status: "pending", ...patch, ...stamp });
+        if (error) throw error;
+      }
+      await loadEventRsvps();
+    } catch {
+      showToast("Could not update attendance — check connection");
     }
   };
 
@@ -1061,6 +1231,7 @@ export default function WeddingTracker() {
         p_love_story:     form.love_story,
         p_dress_code:     form.dress_code,
         p_hero_image_url: form.hero_image_url,
+        p_hero_focal_point: form.hero_focal_point,
         p_fun_qa:         form.fun_qa,
         p_rsvp_deadline:  form.rsvp_deadline,
         p_is_published:   form.is_published,
@@ -1156,19 +1327,35 @@ export default function WeddingTracker() {
     }
   };
 
+  // Apply a check-in optimistically, then persist via the set_guest_checkin RPC.
+  // The RPC (not a direct guests UPDATE) is what lets the helper account check
+  // guests in after #92 removed its direct write on guests. On success we
+  // reconcile checked_in_at with the exact server timestamp. Returns true on
+  // success. Mirrors `persist`'s pendingIds/optimistic pattern.
+  const persistCheckin = async (guest, checkedIn) => {
+    const updated = applyCheckin(guest, checkedIn, new Date().toISOString());
+    setGuests((g) => g.map((x) => (x.id === guest.id ? updated : x)));
+    if (isDemoMode) return true;
+    pendingIds.current.add(guest.id);
+    try {
+      const at = await sb.setCheckin(guest.id, checkedIn);
+      setGuests((g) => g.map((x) => (x.id === guest.id ? { ...x, checked_in_at: at ?? null } : x)));
+      return true;
+    } catch {
+      syncFail();
+      return false;
+    } finally {
+      pendingIds.current.delete(guest.id);
+    }
+  };
+
   // Toggle check-in (undoable)
   const toggleCheckIn = async (guest) => {
-    const now = new Date().toISOString();
-    const updated = {
-      ...guest,
-      checked_in: !guest.checked_in,
-      checked_in_at: !guest.checked_in ? now : null,
-    };
-    const ok = await persist(guest.id, { checked_in: updated.checked_in, checked_in_at: updated.checked_in_at }, updated);
+    const ok = await persistCheckin(guest, !guest.checked_in);
     if (ok) {
       showToast(
-        updated.checked_in ? `✓ ${guest.name} checked in` : `${guest.name} unchecked`,
-        () => { setToast(null); persist(guest.id, { checked_in: guest.checked_in, checked_in_at: guest.checked_in_at }, guest); }
+        !guest.checked_in ? `✓ ${guest.name} checked in` : `${guest.name} unchecked`,
+        () => { setToast(null); persistCheckin(guest, guest.checked_in); }
       );
     }
   };
@@ -1213,13 +1400,18 @@ export default function WeddingTracker() {
   };
 
   // Generic optimistic update used by RsvpTab and SeatingTab for RSVP/seating edits.
+  // Returns true on success, false if the write failed (mirrors persist()), so
+  // callers like RsvpTab.saveEdit can avoid a false "saved" confirmation.
   const updateGuest = async (id, patch) => {
     setGuests((g) => g.map((x) => (x.id === id ? { ...x, ...patch } : x)));
-    if (!isDemoMode) {
-      try { await sb.update("guests", id, patch); return true; }
-      catch { showToast("Not saved — check connection"); return false; }
+    if (isDemoMode) return true;
+    try {
+      await sb.update("guests", id, patch);
+      return true;
+    } catch {
+      showToast("Not saved — check connection");
+      return false;
     }
-    return true;
   };
 
   // Update angbao amount. Optimistic locally + debounced persist (~400ms) so a
@@ -1752,6 +1944,9 @@ export default function WeddingTracker() {
           {loading ? (
             <div className="empty"><div className="empty-icon">⏳</div><div className="empty-text">Loading guests…</div></div>
           ) : guestLoadError && guests.length === 0 && view !== "wedding-page" && view !== "wishes-wrapped" && view !== "budget" && view !== "submissions" ? (
+            // Only block guest-dependent views. Wedding Page (renders from `wedding`),
+            // Wishes Wrapped (own empty state), Budget (vendors/config) and Submissions
+            // don't need the guest list, so a guest-load error shouldn't hide them.
             <div className="empty">
               <div className="empty-icon">⚠️</div>
               <div className="empty-text">Could not load guests</div>
@@ -1903,7 +2098,19 @@ export default function WeddingTracker() {
               )}
             </div>
           ) : view === "rsvp" ? (
-            <RsvpTab guests={guests} onUpdate={updateGuest} onDelete={(g) => { setPendingDelete(g); setDeleteConfirmText(""); setModal("delete-confirm"); }} showToast={showToast} />
+            <RsvpTab
+              guests={guests}
+              onUpdate={updateGuest}
+              onDelete={(g) => { setPendingDelete(g); setDeleteConfirmText(""); setModal("delete-confirm"); }}
+              showToast={showToast}
+              enableSmartRsvp={!!wedding?.enable_smart_rsvp}
+              events={weddingEvents}
+              eventRsvps={eventRsvps}
+              primaryMealEventId={wedding?.primary_meal_event_id || null}
+              onSetInvited={setGuestInvited}
+              onBulkInvite={bulkInvite}
+              onSetEventResponse={setEventResponse}
+            />
           ) : view === "seating" ? (
             <SeatingTab guests={guests} onUpdate={updateGuest} onResetSeating={resetSeating} showToast={showToast} />
           ) : view === "wedding-page" ? (
@@ -2105,6 +2312,8 @@ export default function WeddingTracker() {
               </div>
               <WeddingSetupTab
                 wedding={wedding}
+                events={weddingEvents}
+                onSaveEvents={saveEvents}
                 onSave={async (form) => { const ok = await saveWedding(form); if (ok) setSetupOpen(false); }}
                 showToast={showToast}
               />

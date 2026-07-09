@@ -1,7 +1,14 @@
--- 0008_vendors_budget.sql — Budget categories, overall cap, and vendor management
+-- 0011_vendors_budget.sql — Budget categories, overall cap, and vendor management
 -- Adds two columns to the weddings singleton, creates the vendors table with RLS,
--- recreates get_wedding_config with new budget columns, and adds a dedicated
--- upsert_budget_config RPC. Idempotent — safe to re-run.
+-- keeps get_wedding_config budget-free (anon-callable) and serves budget via a
+-- separate authenticated, couple-only get_budget_config, and adds a couple-only
+-- upsert_budget_config write RPC. Idempotent — safe to re-run.
+--
+-- Ported from upstream (originally 0008_vendors_budget.sql). Renumbered to 0011 so
+-- it runs AFTER the fork's 0010_role_enforcement.sql — this migration reuses that
+-- migration's public.is_helper() to gate the financial vendor + weddings writes to
+-- the couple. Upstream's parallel role system (0009_role_rls.sql, app_role()) was
+-- intentionally NOT ported; the fork keeps the email-based is_helper() model (#92).
 
 -- ── 1. New columns on weddings ────────────────────────────────────────────────
 
@@ -84,7 +91,10 @@ create trigger vendors_set_updated_at
   for each row execute function public.set_updated_at();
 
 -- ── 5. RLS for vendors ────────────────────────────────────────────────────────
--- Same pattern as guests: authenticated role only — anon key cannot touch vendor data.
+-- Vendor/budget data is financial — the same confidentiality tier as `submissions`.
+-- Reads stay open to any authenticated user (RLS filters rows, not columns, and the
+-- Budget tab is UI-gated to the couple), but INSERT/UPDATE/DELETE are couple-only
+-- via the fork's public.is_helper() (defined in 0010). Anon has no policy at all.
 
 alter table public.vendors enable row level security;
 
@@ -94,18 +104,28 @@ create policy "vendors_select" on public.vendors
 
 drop policy if exists "vendors_insert" on public.vendors;
 create policy "vendors_insert" on public.vendors
-  for insert to authenticated with check (true);
+  for insert to authenticated with check (not (select public.is_helper()));
 
 drop policy if exists "vendors_update" on public.vendors;
 create policy "vendors_update" on public.vendors
-  for update to authenticated using (true) with check (true);
+  for update to authenticated
+  using (not (select public.is_helper())) with check (not (select public.is_helper()));
 
 drop policy if exists "vendors_delete" on public.vendors;
 create policy "vendors_delete" on public.vendors
-  for delete to authenticated using (true);
+  for delete to authenticated using (not (select public.is_helper()));
 
--- ── 6. Recreate get_wedding_config (adds budget columns to return type) ───────
--- Must drop the 0007 version first (Postgres requires an exact signature match).
+-- ── 6. Recreate get_wedding_config (fork columns; budget-free) ────────────────
+-- Must drop the prior version first (Postgres requires an exact signature match).
+--
+-- This function is granted to `anon` (the public RSVP form calls it), so it must
+-- expose ONLY public display config. It carries the fork's extra columns
+-- (hero_focal_point #75, enable_smart_rsvp + primary_meal_event_id #78) but
+-- DELIBERATELY omits the budget fields (overall_budget_cap / budget_categories):
+-- those are internal financial data and are served instead by the authenticated,
+-- couple-only get_budget_config() below (§6b). Upstream folded budget into this
+-- public RPC, which leaked it to anon — this migration splits them back apart.
+-- Column order in the return table MUST match the select list below.
 
 drop function if exists public.get_wedding_config();
 
@@ -124,6 +144,7 @@ returns table (
   love_story              text,
   dress_code              text,
   hero_image_url          text,
+  hero_focal_point        text,
   fun_qa                  jsonb,
   rsvp_deadline           date,
   is_published            boolean,
@@ -136,8 +157,8 @@ returns table (
   content_translations    jsonb,
   theme_tokens            jsonb,
   section_photos          jsonb,
-  overall_budget_cap      numeric,
-  budget_categories       jsonb
+  enable_smart_rsvp       boolean,
+  primary_meal_event_id   uuid
 )
 language sql
 security definer
@@ -157,6 +178,7 @@ as $$
     coalesce(love_story, ''),
     coalesce(dress_code, ''),
     coalesce(hero_image_url, ''),
+    coalesce(hero_focal_point, 'center'),
     coalesce(fun_qa, '[]'::jsonb),
     rsvp_deadline,
     coalesce(is_published, false),
@@ -169,13 +191,38 @@ as $$
     coalesce(content_translations, '{}'::jsonb),
     coalesce(theme_tokens, '{}'::jsonb),
     coalesce(section_photos, '{}'::jsonb),
-    coalesce(overall_budget_cap, 0),
-    coalesce(budget_categories, '[]'::jsonb)
+    coalesce(enable_smart_rsvp, false),
+    primary_meal_event_id
   from public.weddings
   limit 1;
 $$;
 
 grant execute on function public.get_wedding_config() to anon, authenticated;
+
+-- ── 6b. get_budget_config — authenticated, couple-only budget read ────────────
+-- The admin Budget tab reads the couple's cap + category allocations here instead
+-- of via get_wedding_config, so anon never receives budget data. Gated to the
+-- couple (is_helper() → no rows) to match the couple-only vendor/weddings writes.
+drop function if exists public.get_budget_config();
+
+create or replace function public.get_budget_config()
+returns table (
+  overall_budget_cap numeric,
+  budget_categories  jsonb
+)
+language sql
+security definer
+set search_path = public
+as $$
+  select
+    coalesce(overall_budget_cap, 0),
+    coalesce(budget_categories, '[]'::jsonb)
+  from public.weddings
+  where not (select public.is_helper())
+  limit 1;
+$$;
+
+grant execute on function public.get_budget_config() to authenticated;
 
 -- ── 7. Dedicated budget-config write RPC ─────────────────────────────────────
 -- Separate from upsert_wedding_config so saving budget caps never risks
@@ -191,6 +238,13 @@ security definer
 set search_path = public
 as $$
 begin
+  -- security definer bypasses RLS, so the couple-only gate must be enforced here
+  -- too — otherwise a helper could call this RPC directly and mutate the budget,
+  -- defeating the `not is_helper()` write policies on vendors/weddings.
+  if (select public.is_helper()) then
+    raise exception 'insufficient_privilege' using errcode = '42501';
+  end if;
+
   insert into public.weddings (
     bride_name, groom_name,
     overall_budget_cap, budget_categories,
@@ -210,3 +264,25 @@ $$;
 
 -- Authenticated only — budget data is internal, not public.
 grant execute on function public.upsert_budget_config(numeric, jsonb) to authenticated;
+
+-- ── 8. Harden weddings access ────────────────────────────────────────────────
+-- 0004 created a single "public" policy `for all using (true)` that let ANYONE —
+-- including anon and the helper — read AND write the weddings singleton (love
+-- story, venue, and now the budget cap/categories added in §1). The fork's 0010
+-- role enforcement never touched this table, so it was still wide open. Split it:
+--   • SELECT → authenticated only. The public pages never read this table directly
+--     (verified: RsvpPage/WeddingPage go through the anon-granted security-definer
+--     RPCs get_wedding_config / get_public_wedding, which bypass RLS), so removing
+--     the anon read closes the budget-to-anon leak without breaking the public site.
+--   • writes → couple only (not is_helper()).
+-- The security-definer upsert_* RPCs bypass RLS, so admin saves are unaffected.
+drop policy if exists "public" on public.weddings;
+
+drop policy if exists "weddings_select" on public.weddings;
+create policy "weddings_select" on public.weddings
+  for select to authenticated using (true);
+
+drop policy if exists "weddings_write" on public.weddings;
+create policy "weddings_write" on public.weddings
+  for all to authenticated
+  using (not (select public.is_helper())) with check (not (select public.is_helper()));

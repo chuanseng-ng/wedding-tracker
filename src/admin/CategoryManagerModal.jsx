@@ -53,7 +53,7 @@ export default function CategoryManagerModal({ categories, vendors, onSave, onCl
     if (dropped > 0) showToast(`${dropped} unnamed ${dropped === 1 ? "category" : "categories"} skipped`);
     setSaving(true);
     try {
-      await onSave(valid.map((c) => ({ ...c, cap: Number(c.cap) || 0 })));
+      await onSave(valid.map((c) => ({ ...c, cap: Math.max(0, Number(c.cap) || 0) })));
     } finally {
       setSaving(false);
     }

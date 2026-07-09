@@ -15,6 +15,8 @@ export default {
   "wedding.inviteTag": "✦ {groom} & {bride} invite you ✦",
   "wedding.inviteTagFallback": "— — — You are cordially invited — — —",
   "wedding.rsvpNow": "RSVP Now",
+  "wedding.loading": "Loading wedding page",
+  "wedding.rsvpHint": "Use the personal link in your invitation for a faster experience",
 
   "wedding.countdown.today": "Today! 🎊",
   "wedding.countdown.toGo_one": "{n} day to go",
@@ -60,6 +62,7 @@ export default {
   "rsvp.invited": "You're Invited",
   "rsvp.eyebrow": "RSVP",
   "rsvp.loading": "Loading your details…",
+  "rsvp.configError": "Could not load event details — please try refreshing.",
   "rsvp.demoBadge": "Demo Mode",
 
   "rsvp.name.label": "Your Full Name",
@@ -75,6 +78,10 @@ export default {
   "rsvp.attending.q": "Will you be attending?",
   "rsvp.attending.yes": "✓ Yes, I'll be there!",
   "rsvp.attending.no": "✗ Sorry, I can't make it",
+
+  "rsvp.smart.title": "Which events will you join?",
+  "rsvp.smart.hint": "Let us know for each guest in your party.",
+  "rsvp.smart.you": "You",
 
   "rsvp.rel.q": "How do you know the couple?",
   "rsvp.friend.q": "Which kind of friend?",
@@ -130,15 +137,18 @@ export default {
 
   // Confirmation view
   "rsvp.confirm.coupleFallback": "the couple",
+  "rsvp.confirm.eventTitleFallback": "Wedding",
   "rsvp.confirm.seeYou": "See you there!",
   "rsvp.confirm.miss": "We'll miss you!",
   "rsvp.confirm.yesMsg": "Your RSVP is confirmed. {couple} can't wait to celebrate with you.",
   "rsvp.confirm.noMsg": "Thanks for letting us know. {couple} will miss you.",
+  "rsvp.confirm.addToCalendar": "Add to Calendar",
 
   // Errors
   "rsvp.err.nameSelect": "Please type your name above and select it from the list.",
   "rsvp.err.nameEnter": "Please enter your name.",
   "rsvp.err.attendingSelect": "Please select whether you'll be attending.",
+  "rsvp.err.answerAllEvents": "Please answer yes or no for each event.",
   "rsvp.err.emailInvalid": "Please enter a valid email address.",
   "rsvp.err.notSetup": "RSVP is not set up yet — the database migration hasn't been run. Contact the couple.",
   "rsvp.err.linkExpired": "Your RSVP link has expired. Please contact the couple for a new link.",

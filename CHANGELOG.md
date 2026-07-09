@@ -5,12 +5,40 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [2026-07-09] — chore: sync fork with upstream
+
+### Added
+
+- **Budget & Vendors tab (from upstream #96)** — brought into the fork. See the
+  `feat/budget-vendors (#96)` entry below for the full feature list.
+- Upstream bug fixes **#91, #93, #94, #95** (see the `fix/bugs-91-92-93-94-95 (#97)`
+  entry below). #91/#95 the fork had already fixed independently; the merge keeps the
+  fork's equivalent implementations.
+
+### Changed
+
+- **Role enforcement stays on the fork's `is_helper()` model.** Upstream #96/#97 shipped a
+  parallel role system (`0009_role_rls.sql`, a JWT-claim `public.app_role()`). The fork keeps
+  its own email-based `public.is_helper()` (migration `0010_role_enforcement.sql`, #92) as the
+  single source of truth, so upstream's `0009_role_rls.sql` was **not** applied and the app no
+  longer writes an `app_role` claim into the JWT.
+- **Vendors migration renumbered** `0008_vendors_budget.sql` → `0011_vendors_budget.sql` so it
+  runs after `0010`. Its vendor RLS and the newly-hardened `weddings` writes are gated on
+  `not is_helper()` (couple-only) instead of `app_role() = 'couple'`. `get_wedding_config()` is
+  recreated as the **union** of the fork's columns (`hero_focal_point`, `enable_smart_rsvp`,
+  `primary_meal_event_id`) and upstream's (`overall_budget_cap`, `budget_categories`).
+- **`weddings` writes are now couple-only** — the old `"public"` policy allowed anon/helper
+  writes; replaced with open reads + `not is_helper()` writes (parity with upstream's hardening,
+  expressed in the fork's role model).
+
+---
+
 ## [2026-07-09] — fix/bugs-91-92-93-94-95 (#97)
 
 ### Fixed
 
 - **#91 — PIN lockout no longer fires on transient errors** — only wrong-password responses (Supabase status 400 / "invalid credentials") burn an attempt; network/connection errors show a retry prompt without touching the counter.
-- **#92 — Role-based access enforced at the DB layer** — new migration (`0009_role_rls.sql`) adds `public.app_role()` (reads `user_metadata.app_role` from the JWT) and narrows RLS policies so helpers cannot INSERT/DELETE guests, write to `tables`, `weddings`, `submissions`, or `vendors`. The three write RPCs (`upsert_wedding_config`, `upsert_wedding_page`, `upsert_budget_config`) now raise `insufficient_privilege` for non-couple callers, closing the security-definer bypass gap. The app embeds the role into JWT user_metadata on every login and session restore.
+- **#92 — Role-based access enforced at the DB layer** — _upstream shipped this as `0009_role_rls.sql` (`public.app_role()`, a JWT `user_metadata.app_role` claim). **The fork does not use that migration**; it enforces the same guarantee via its own email-based `public.is_helper()` (`0010_role_enforcement.sql`), so helpers cannot INSERT/DELETE guests or write to `tables`, `weddings`, `submissions`, or `vendors`. See the sync entry above._
 - **#93 — Guest-load error no longer blocks unrelated tabs** — Wedding Page, Wishes Wrapped, Budget, and Submissions tabs all render normally when the guest fetch fails, since they load their data independently.
 - **#94 — `saveEdit` no longer shows "RSVP updated" on failure** — `updateGuest` now returns `true`/`false`; `saveEdit` keeps the editor open on `false`. Same fix applied to `SeatingTab.generateSuggestion`, which had the same oversight.
 - **#95 — `.ics` calendar invite is now RFC 5545-compliant** — adds required `UID` (stable, derived from `wedding.id + date`) and `DTSTAMP` fields; sets `DTEND` to the day after `DTSTART` (exclusive, as the spec requires for all-day events).
