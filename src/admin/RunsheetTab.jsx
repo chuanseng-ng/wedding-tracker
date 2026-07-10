@@ -304,7 +304,7 @@ export default function RunsheetTab({ wedding, onSave, showToast, isReadOnly }) 
                   <input
                     className="rs-cell-input"
                     value={item.time}
-                    placeholder="7:00 AM"
+                    placeholder="e.g. 7am, 3:30 PM"
                     readOnly={isReadOnly}
                     onChange={isReadOnly ? undefined : (e) => updateField(item.id, "time", e.target.value)}
                   />

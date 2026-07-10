@@ -1285,6 +1285,7 @@ export default function WeddingTracker() {
         p_runsheet: runsheet,
         p_is_runsheet_published: is_runsheet_published,
       });
+      setWedding((w) => ({ ...(w || {}), runsheet, is_runsheet_published }));
       return true;
     } catch {
       showToast("Could not save runsheet — check connection");
