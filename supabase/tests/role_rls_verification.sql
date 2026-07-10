@@ -1,6 +1,6 @@
 -- Manual RLS verification for role enforcement (#92, migration 0010;
 -- config-RPC guards #101, migration 0015; helper guest projection #99,
--- migration 0016).
+-- migration 0016; runsheet write guard, migration 0017).
 --
 -- There is no automated DB test harness in CI (all Vitest tests are pure unit
 -- tests). Run this by hand after applying migrations, in the Supabase SQL editor
@@ -56,6 +56,7 @@ begin;
   -- seeing it, re-run the script for the next assertion.
   -- select public.upsert_wedding_config('x','y',null,null,null,null,null);         -- expect: error 42501
   -- select public.upsert_wedding_page('slug-x',null,null,null,null,null,false,null); -- expect: error 42501
+  -- select public.upsert_runsheet('[]'::jsonb, false);                              -- expect: error 42501 (0017)
 
   reset role;
 
@@ -68,6 +69,9 @@ begin;
   -- select public.get_budget_config();                             -- expect: permission denied for function
   -- select public.upsert_budget_config(1, '[]'::jsonb);            -- expect: permission denied for function
   -- select public.get_checkin_guests();                            -- expect: permission denied for function (0016)
+  -- select public.upsert_runsheet('[]'::jsonb, false);              -- expect: permission denied for function (0017)
+  -- The published-runsheet read stays anon-callable BY DESIGN (public page):
+  -- select * from public.get_public_runsheet('some-slug');          -- expect: succeeds (0 or 1 rows, no error)
 
   reset role;
 
