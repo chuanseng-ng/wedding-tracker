@@ -72,6 +72,9 @@ begin;
   -- select public.upsert_runsheet('[]'::jsonb, false);              -- expect: permission denied for function (0017)
   -- The published-runsheet read stays anon-callable BY DESIGN (public page):
   -- select * from public.get_public_runsheet('some-slug');          -- expect: succeeds (0 or 1 rows, no error)
+  -- Unpublished runsheets are masked from anon in get_wedding_config (0017 §2):
+  select runsheet as anon_runsheet_when_unpublished
+    from public.get_wedding_config();  -- expect: '[]' unless is_runsheet_published = true
 
   reset role;
 
