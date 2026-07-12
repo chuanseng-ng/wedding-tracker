@@ -1,6 +1,7 @@
 import { supabaseAdmin } from "./_lib/supabaseAdmin.js";
 import { sendEmail, getFromAddress, missingEmailEnvVars } from "./_lib/emailProvider.js";
 import { selectDueReminders, computeDueDate } from "../src/lib/checklistUtils.js";
+import { localDateISO } from "../src/lib/budgetUtils.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -77,9 +78,12 @@ export default async function handler(req, res) {
   const days = overridden ? parseInt(req.query.override_days, 10) : daysUntil(wedding.wedding_date);
   // Checklist "today": real runs use the actual date; an override simulates the
   // matching day (wedding date minus N days) so both jobs see the same clock.
+  // localDateISO (not toISOString) keeps "today" on the same local-day basis as
+  // computeDueDate/selectDueReminders — toISOString is the UTC calendar day and
+  // can differ near midnight on non-UTC servers.
   const todayISO = overridden
     ? computeDueDate(wedding.wedding_date, -days)
-    : new Date().toISOString().slice(0, 10);
+    : localDateISO();
 
   let fromAddress;
   try {
