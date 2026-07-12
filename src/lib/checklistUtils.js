@@ -1,8 +1,14 @@
 // Pure planning-checklist computation functions — no side effects, fully testable.
-// Task shape: { id, text, category, dueOffsetDays, assignee, done }
+// Task shape: { id, text, category, dueOffsetDays, dueDate?, assignee, done, reminders? }
 //   dueOffsetDays: number | null — days relative to the wedding date (negative = before).
+//   dueDate: 'yyyy-mm-dd' | null — pinned exact due date; wins over dueOffsetDays and
+//     deliberately does NOT shift when the wedding date changes (#110). Absent on
+//     pre-existing checklists ⇒ offset-based.
 //   assignee: 'both' | 'bride' | 'groom'.
+//   reminders: [{ id, offsetDays }] — offsetDays ≤ 0, relative to the task's DUE date
+//     (not the wedding date). Absent on pre-existing checklists ⇒ no reminders.
 import { localDateISO } from "./budgetUtils.js";
+import { cleanDueDate } from "./validation.js";
 
 /** Preset offsets shown in the "due" picker, most-in-advance first. */
 export const OFFSET_PRESETS = [
@@ -65,11 +71,83 @@ export function computeDueDate(weddingDateISO, dueOffsetDays) {
   return localDateISO(date);
 }
 
+/**
+ * The single source of truth for a task's due date: a pinned exact `dueDate`
+ * wins; otherwise the offset resolves against the wedding date. A corrupt
+ * stored `dueDate` falls through to the offset — the reminder cron must never
+ * throw on bad data.
+ */
+export function resolveDueDate(weddingDateISO, task) {
+  return cleanDueDate(task?.dueDate) ?? computeDueDate(weddingDateISO, task?.dueOffsetDays);
+}
+
 /** A task is overdue only if it has a resolvable due date, isn't done, and that date has passed. */
 export function isTaskOverdue(dueDateISO, done, todayISO) {
   if (done || !dueDateISO) return false;
   const today = todayISO ?? localDateISO();
   return dueDateISO < today;
+}
+
+/** Preset offsets for the per-task reminder picker, relative to the DUE date. */
+export const REMINDER_PRESETS = [
+  { label: "1 month before due", days: -30 },
+  { label: "2 weeks before due", days: -14 },
+  { label: "1 week before due", days: -7 },
+  { label: "3 days before due", days: -3 },
+  { label: "Day before due", days: -1 },
+  { label: "On due date", days: 0 },
+];
+
+/**
+ * A task's reminders, normalized to an array. The single access point for both
+ * the UI and the reminder cron. Reminder ids are minted once when a reminder is
+ * added and must NEVER be regenerated — checklist_reminder_log dedups sent
+ * emails by (task.id, reminder.id).
+ */
+export function taskReminders(task) {
+  return Array.isArray(task?.reminders) ? task.reminders : [];
+}
+
+/**
+ * Resolve a reminder's fire date: the task's RESOLVED due date + reminder
+ * offset. Anchoring on the resolved date (not wedding date + offsets) makes
+ * offset-based and pinned exact-date tasks behave identically — including
+ * exact-date tasks on a wedding with no date set yet.
+ */
+export function computeReminderDate(dueDateISO, reminderOffsetDays) {
+  if (reminderOffsetDays === null || reminderOffsetDays === undefined) return null;
+  return computeDueDate(dueDateISO, reminderOffsetDays);
+}
+
+/**
+ * A reminder fires when its date is today OR already past (`<=`, not `===`):
+ * a missed cron day fires late rather than never; checklist_reminder_log
+ * prevents repeats.
+ */
+export function isReminderDue(reminderDateISO, todayISO, done) {
+  return Boolean(!done && reminderDateISO && reminderDateISO <= todayISO);
+}
+
+/**
+ * The reminder cron's whole decision, kept pure for testing: every reminder on
+ * a not-done, due-dated task whose fire date is ≤ today and whose
+ * `${taskId}:${reminderId}` key is not in `sentKeys`.
+ * Returns [{ task, reminder, reminderDate, dueDate }].
+ */
+export function selectDueReminders(checklist, weddingDateISO, sentKeys, todayISO) {
+  if (!Array.isArray(checklist)) return [];
+  const due = [];
+  for (const task of checklist) {
+    const dueDate = resolveDueDate(weddingDateISO, task);
+    if (!dueDate || task.done) continue;
+    for (const reminder of taskReminders(task)) {
+      const reminderDate = computeReminderDate(dueDate, reminder.offsetDays);
+      if (!isReminderDue(reminderDate, todayISO, task.done)) continue;
+      if (sentKeys.has(`${task.id}:${reminder.id}`)) continue;
+      due.push({ task, reminder, reminderDate, dueDate });
+    }
+  }
+  return due;
 }
 
 /** { done, total, pct } completion summary for a checklist array. */

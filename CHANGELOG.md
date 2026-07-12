@@ -5,6 +5,35 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [2026-07-12] — feat/110-exact-due-dates
+
+### Added
+
+- **Exact due dates for checklist tasks (#110)** — each task's due picker now offers "Exact date…" alongside the relative presets, revealing a date input for tasks with a hard external deadline (e.g. a vendor's booking cutoff). An exact date is **pinned**: unlike offset presets, it deliberately does not move when the wedding date changes (shown with a 📌 cue). One mode per task — picking a preset clears the exact date and vice versa; clearing the date input behaves like "No specific deadline" (also clearing reminders). Reminders now anchor on the task's *resolved* due date, so they work identically for both modes — including exact-date tasks on a wedding whose date isn't set yet. Stored as an optional `dueDate` field in the existing `weddings.checklist` JSONB; **no migration needed** and pre-existing checklists are untouched.
+
+### Changed
+
+- **`api/send-reminders.js`** — a missing wedding date now skips only the guest-reminder job (`guestReason: "wedding date not set"`); the checklist digest still runs, since pinned exact-date tasks are meaningful before the wedding date is configured.
+
+### Notes
+
+- The other two refinements floated in #110 — a category filter and CSV export for the checklist — are split into separate follow-up issues rather than bundled here.
+
+---
+
+## [2026-07-11] — feat/113-checklist-reminders
+
+### Added
+
+- **Checklist reminder notifications (#113)** — checklist tasks can now carry multiple email reminders, each an offset relative to the task's due date (1 month / 2 weeks / 1 week / 3 days / day before / on due date). Configured per task via a bell toggle in the Checklist tab (due-dated tasks only; clearing a task's due date clears its reminders). The daily `send-reminders` cron emails a single digest of all reminders firing that day to `HOST_EMAIL` (skipped with a reason when unset); done tasks never fire, and a missed cron day fires late rather than never.
+- **Migration `0018_checklist_reminders.sql`** — new `checklist_reminder_log` table (composite PK `task_id, reminder_id`) recording sent reminders. Written only by the service-role cron: reminder *config* stays in the couple-edited `weddings.checklist` JSONB while sent *state* lives here, so a stale admin tab re-saving the checklist can never wipe sent-state and re-trigger emails. RLS enabled with no policies — invisible to `anon`/`authenticated`.
+
+### Changed
+
+- **`api/send-reminders.js`** — restructured into two isolated jobs (guest RSVP reminders + checklist digest); a failure or skip in one no longer blocks the other, and the >90-days-out early exit now applies only to guest reminders. Response gains `checklistSent` plus per-job `reason`/`error` fields (`sent` unchanged). `?override_days=<n>` (non-prod) now also simulates the checklist clock (today = wedding date − n days).
+
+---
+
 ## [2026-07-10] — feature/planning-checklist
 
 ### Added

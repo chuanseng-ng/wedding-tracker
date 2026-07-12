@@ -3,12 +3,17 @@ import { isDemoMode } from "../lib/supabase.js";
 import { Icon } from "../shared/icons.jsx";
 import {
   OFFSET_PRESETS,
+  REMINDER_PRESETS,
   DEFAULT_CHECKLIST_TEMPLATE,
   buildDefaultChecklist,
-  computeDueDate,
+  resolveDueDate,
+  computeReminderDate,
   isTaskOverdue,
   checklistProgress,
+  taskReminders,
 } from "../lib/checklistUtils.js";
+import { cleanDueDate } from "../lib/validation.js";
+import { localDateISO } from "../lib/budgetUtils.js";
 
 const ASSIGNEES = [
   { key: "both", label: "Both" },
@@ -94,11 +99,47 @@ const styles = `
     font-size: 12px; color: var(--brown); background: transparent; border: 1.5px solid rgba(201,168,76,0.2);
     border-radius: 6px; padding: 3px 6px; font-family: inherit; cursor: pointer;
   }
+  .checklist-due-date-input {
+    font-size: 12px; color: var(--brown); background: transparent; border: 1.5px solid rgba(201,168,76,0.2);
+    border-radius: 6px; padding: 2px 6px; font-family: inherit; cursor: pointer;
+  }
   .checklist-due-date { font-size: 12px; color: var(--brown); opacity: 0.7; }
   .checklist-overdue-badge {
     font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
     color: var(--red); background: var(--red-soft); padding: 2px 8px; border-radius: 20px;
   }
+
+  .checklist-reminder-toggle {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 11px; padding: 3px 9px; border-radius: 20px; cursor: pointer;
+    border: 1.5px solid rgba(201,168,76,0.25); background: transparent; color: var(--brown);
+    opacity: 0.6; transition: opacity 0.15s, border-color 0.15s;
+  }
+  .checklist-reminder-toggle:hover { opacity: 1; }
+  .checklist-reminder-toggle.active { opacity: 1; border-color: var(--gold); background: rgba(201,168,76,0.15); color: var(--gold-dark); font-weight: 500; }
+  .checklist-reminder-toggle svg { width: 12px; height: 12px; }
+
+  .checklist-reminders-panel {
+    display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+    padding: 8px 10px; border-radius: 8px; background: rgba(201,168,76,0.07);
+  }
+  .checklist-reminder-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 11px; color: var(--gold-dark); background: rgba(201,168,76,0.15);
+    border-radius: 20px; padding: 3px 5px 3px 10px;
+  }
+  .checklist-reminder-chip-date { opacity: 0.65; }
+  .checklist-reminder-remove {
+    background: transparent; border: none; cursor: pointer; padding: 0 3px;
+    color: var(--gold-dark); opacity: 0.55; font-size: 13px; line-height: 1; border-radius: 50%;
+  }
+  .checklist-reminder-remove:hover { opacity: 1; color: var(--red); }
+  .checklist-reminder-add {
+    font-size: 11px; color: var(--brown); background: transparent;
+    border: 1.5px dashed rgba(201,168,76,0.35); border-radius: 20px;
+    padding: 3px 8px; font-family: inherit; cursor: pointer;
+  }
+  .checklist-reminder-note { font-size: 11px; color: var(--brown); opacity: 0.55; font-style: italic; }
 
   .checklist-del-btn {
     background: transparent; border: none; cursor: pointer; padding: 4px;
@@ -120,10 +161,15 @@ const styles = `
 /** value coding for the due-offset <select> — HTML select options are always strings. */
 const offsetToOptionValue = (days) => (days === null || days === undefined ? "none" : String(days));
 const optionValueToOffset = (value) => (value === "none" ? null : Number(value));
+// The "Exact date…" mode sits between the dated presets and "No specific
+// deadline", so the two lists are rendered separately around it.
+const DATED_PRESETS = OFFSET_PRESETS.filter((p) => p.days !== null);
+const NO_DEADLINE_PRESET = OFFSET_PRESETS.find((p) => p.days === null);
 
 export default function ChecklistTab({ wedding, onSave, isCouple }) {
   const [items, setItems] = useState([]);
   const [saveStatus, setSaveStatus] = useState("");
+  const [remindersOpenId, setRemindersOpenId] = useState(null);
   const initialized = useRef(false);
   const saveTimer = useRef(null);
   const statusTimer = useRef(null);
@@ -219,7 +265,7 @@ export default function ChecklistTab({ wedding, onSave, isCouple }) {
   const { done, total, pct } = checklistProgress(items);
 
   const rows = items
-    .map((item) => ({ item, dueDate: computeDueDate(weddingDate, item.dueOffsetDays) }))
+    .map((item) => ({ item, dueDate: resolveDueDate(weddingDate, item) }))
     .sort((a, b) => {
       if (a.dueDate && b.dueDate) return a.dueDate.localeCompare(b.dueDate);
       if (a.dueDate) return -1;
@@ -273,6 +319,10 @@ export default function ChecklistTab({ wedding, onSave, isCouple }) {
         <div className="checklist-list">
           {rows.map(({ item, dueDate }) => {
             const overdue = isTaskOverdue(dueDate, item.done);
+            const isExact = cleanDueDate(item.dueDate) !== null;
+            // Reminders need a due anchor: a pinned exact date, or an offset
+            // (kept even without a wedding date, matching pre-#110 behavior).
+            const hasDueConfig = isExact || (item.dueOffsetDays !== null && item.dueOffsetDays !== undefined);
             return (
               <div key={item.id} className={`checklist-row ${item.done ? "done" : ""} ${overdue ? "overdue" : ""}`}>
                 <button
@@ -310,16 +360,114 @@ export default function ChecklistTab({ wedding, onSave, isCouple }) {
                     </div>
                     <select
                       className="checklist-due-select"
-                      value={offsetToOptionValue(item.dueOffsetDays)}
-                      onChange={(e) => updateTask(item.id, { dueOffsetDays: optionValueToOffset(e.target.value) })}
+                      value={isExact ? "exact" : offsetToOptionValue(item.dueOffsetDays)}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        if (value === "exact") {
+                          // Pin to the currently-resolved date (else today) so exact
+                          // mode always holds a valid date — autosave never persists
+                          // a blank. Reminders re-anchor automatically.
+                          updateTask(item.id, { dueDate: dueDate ?? localDateISO(), dueOffsetDays: null });
+                        } else if (value === "none") {
+                          // No due date ⇒ no anchor for reminders: clear all in one
+                          // patch so a single save round-trip keeps them consistent.
+                          updateTask(item.id, { dueOffsetDays: null, dueDate: null, reminders: [] });
+                        } else {
+                          updateTask(item.id, { dueOffsetDays: optionValueToOffset(value), dueDate: null });
+                        }
+                      }}
                     >
-                      {OFFSET_PRESETS.map((p) => (
+                      {DATED_PRESETS.map((p) => (
                         <option key={p.label} value={offsetToOptionValue(p.days)}>{p.label}</option>
                       ))}
+                      <option value="exact">Exact date…</option>
+                      <option value="none">{NO_DEADLINE_PRESET.label}</option>
                     </select>
-                    {dueDate && <span className="checklist-due-date">Due {dueDate}</span>}
+                    {isExact && (
+                      <input
+                        type="date"
+                        className="checklist-due-date-input"
+                        value={item.dueDate}
+                        onChange={(e) => {
+                          const v = cleanDueDate(e.target.value);
+                          // Clearing (or an invalid value from) the input means "no
+                          // deadline" — same one-patch reminder clear as the select.
+                          updateTask(item.id, v ? { dueDate: v } : { dueDate: null, reminders: [] });
+                        }}
+                      />
+                    )}
+                    {dueDate && (
+                      <span
+                        className="checklist-due-date"
+                        title={isExact ? "Pinned to this exact date — won't move if the wedding date changes" : undefined}
+                      >
+                        Due {dueDate}{isExact ? " 📌" : ""}
+                      </span>
+                    )}
                     {overdue && <span className="checklist-overdue-badge">Overdue</span>}
+                    {hasDueConfig && (
+                      <button
+                        className={`checklist-reminder-toggle ${taskReminders(item).length > 0 ? "active" : ""}`}
+                        onClick={() => setRemindersOpenId((prev) => (prev === item.id ? null : item.id))}
+                        title="Email reminders for this task"
+                      >
+                        <Icon.Bell />
+                        {taskReminders(item).length > 0 ? taskReminders(item).length : ""}
+                      </button>
+                    )}
                   </div>
+                  {remindersOpenId === item.id && hasDueConfig && (
+                    <div className="checklist-reminders-panel">
+                      {taskReminders(item).map((r) => {
+                        const preset = REMINDER_PRESETS.find((p) => p.days === r.offsetDays);
+                        const label = preset ? preset.label : `${-r.offsetDays} days before due`;
+                        const fireDate = computeReminderDate(dueDate, r.offsetDays);
+                        return (
+                          <span key={r.id} className="checklist-reminder-chip">
+                            {label}
+                            {fireDate && <span className="checklist-reminder-chip-date">{fireDate}</span>}
+                            <button
+                              className="checklist-reminder-remove"
+                              onClick={() => updateTask(item.id, { reminders: taskReminders(item).filter((x) => x.id !== r.id) })}
+                              title="Remove reminder"
+                            >
+                              ×
+                            </button>
+                          </span>
+                        );
+                      })}
+                      {(() => {
+                        const used = new Set(taskReminders(item).map((r) => r.offsetDays));
+                        const available = REMINDER_PRESETS.filter((p) => !used.has(p.days));
+                        if (available.length === 0) return null;
+                        return (
+                          <select
+                            className="checklist-reminder-add"
+                            value=""
+                            onChange={(e) => {
+                              if (e.target.value === "") return;
+                              // The id minted here is the reminder's permanent identity —
+                              // the cron's sent-log dedups on it, so it must never change.
+                              updateTask(item.id, {
+                                reminders: [
+                                  ...taskReminders(item),
+                                  { id: crypto.randomUUID(), offsetDays: Number(e.target.value) },
+                                ],
+                              });
+                            }}
+                          >
+                            <option value="">+ Add reminder…</option>
+                            {available.map((p) => (
+                              <option key={p.label} value={String(p.days)}>{p.label}</option>
+                            ))}
+                          </select>
+                        );
+                      })()}
+                      <span className="checklist-reminder-note">
+                        Emailed to the host on the day{taskReminders(item).length === 0 ? " — add one to get notified" : ""}
+                      </span>
+                    </div>
+                  )}
                 </div>
                 <button className="checklist-del-btn" onClick={() => deleteTask(item.id)} title="Delete task">
                   <Icon.Trash />

@@ -120,7 +120,7 @@ EMAIL_PROVIDER=gmail                      # "gmail" (default) or "resend"
 RESEND_SENDING_DOMAIN=mail.yourdomain.com # if using Resend
 RSVP_WEBHOOK_SECRET=a-random-secret      # shared between Supabase Vault and Vercel
 SITE_URL=https://your-app.vercel.app     # base URL for token links in emails
-HOST_EMAIL=your@email.com               # receives change-of-mind RSVP notifications
+HOST_EMAIL=your@email.com               # receives change-of-mind RSVP notifications + checklist reminder digests
 
 # Optional — auto-translate (Wedding Page → Translations). Server-only.
 DEEPL_API_KEY=                           # preferred; falls back to MyMemory if unset
@@ -181,6 +181,10 @@ This requires the Vercel CLI and a local `.env` with the server-only variables f
 ## 5. Email automation
 
 When a guest submits the RSVP form, they receive a confirmation email with a `.ics` calendar invite attached. Guests who haven't responded receive reminder emails 90 days and 30 days before the wedding. When a guest changes their RSVP status (confirmed ↔ declined), you receive a notification at `HOST_EMAIL`.
+
+You can also attach email reminders to your planning-checklist tasks (Checklist tab → bell icon on any task with a due date — e.g. 1 week before due, on the due date). The daily cron emails a digest of every reminder firing that day to `HOST_EMAIL`; each reminder is sent once, and finished tasks are skipped.
+
+A task's due date can be either a preset relative to the wedding date (e.g. "6 months before" — these shift automatically if the wedding date changes) or, via "Exact date…", a specific pinned calendar day for hard external deadlines like a vendor's booking cutoff. Pinned dates (marked 📌) deliberately stay put when the wedding date changes. Reminders work with both kinds — exact-date tasks can even fire reminders before you've set the wedding date.
 
 This is powered by a Supabase webhook trigger → Vercel serverless function.
 
