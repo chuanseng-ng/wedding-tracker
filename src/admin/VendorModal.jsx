@@ -87,7 +87,9 @@ export default function VendorModal({ mode, vendor, categories, onSave, onClose 
           </div>
 
           {/* Contract total + Status */}
-          <div className="form-row">
+          {/* Bottom-align so the wrapping contract-total label can't push its
+              input out of line with the Status select (#122) */}
+          <div className="form-row" style={{ alignItems: "flex-end" }}>
             <div className="form-group" style={{ flex: 2 }}>
               <label className="form-label">
                 Contract total ($){" "}
