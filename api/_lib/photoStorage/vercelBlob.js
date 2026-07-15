@@ -13,8 +13,9 @@ export async function createUploadGrant({ key, contentType, sizeBytes }) {
     token: process.env.BLOB_READ_WRITE_TOKEN,
     pathname: key,
     allowedContentTypes: [contentType],
-    // Small slack over the client-reported size: multipart/base64 overheads.
-    maximumSizeInBytes: Math.min(sizeBytes + 64 * 1024, 5 * 1024 * 1024),
+    // Exact cap: maximumSizeInBytes measures the blob itself (no wire
+    // overhead), and the client uploads exactly the blob it declared.
+    maximumSizeInBytes: sizeBytes,
     addRandomSuffix: false,
     validUntil: Date.now() + 5 * 60 * 1000,
   });
@@ -39,10 +40,10 @@ export async function publicUrlFor({ key, clientUrl }) {
 }
 
 export async function deleteObject({ key, url }) {
-  // del() accepts the stored public URL; fall back to the key-derived path
-  // only when the URL validates (it always should — it came from confirm).
-  const target = isValidBlobUrl(url, key) ? url : null;
-  if (!target) return;
+  // Prefer the validated stored URL; fall back to the pathname (del() accepts
+  // both) — pending rows that never confirmed have no public_url, and skipping
+  // them would orphan the uploaded blob forever.
+  const target = isValidBlobUrl(url, key) ? url : key;
   try {
     await del(target, { token: process.env.BLOB_READ_WRITE_TOKEN });
   } catch (e) {

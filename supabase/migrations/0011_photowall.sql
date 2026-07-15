@@ -120,11 +120,15 @@ declare
   v_pin     text;
   v_id      uuid;
 begin
+  -- Lock the singleton row for this transaction: serializes concurrent grant
+  -- calls so the attempt-window and pending/total cap checks below can't all
+  -- read stale counts and overshoot together.
   select coalesce(w.enable_photowall, false),
          trim(coalesce(w.photowall_pin, ''))
     into v_enabled, v_pin
     from public.weddings w
-    limit 1;
+    limit 1
+    for update;
 
   -- The PIN is mandatory; enabled-with-blank-pin (only reachable by editing
   -- the row outside upsert_wedding_config) fails closed.

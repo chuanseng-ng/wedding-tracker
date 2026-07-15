@@ -43,13 +43,19 @@ const rateLimited = makeRateLimiter({ windowMs: 10 * 60_000, max: 10 });
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).end();
 
-  const missing = missingPhotoStorageEnvVars();
-  if (missing.length) {
-    console.error(`photowall: missing env vars: ${missing.join(", ")}`);
-    return res.status(500).json({ error: "photowall_disabled" });
+  const { action } = req.body ?? {};
+
+  // Storage config is required for uploads only — moderation delete must keep
+  // working (row removal + best-effort object cleanup) even when the provider
+  // is unset or its credentials are mid-rotation.
+  if (action === "grant" || action === "confirm") {
+    const missing = missingPhotoStorageEnvVars();
+    if (missing.length) {
+      console.error(`photowall: missing env vars: ${missing.join(", ")}`);
+      return res.status(500).json({ error: "photowall_disabled" });
+    }
   }
 
-  const { action } = req.body ?? {};
   if (action === "grant") return grant(req, res);
   if (action === "confirm") return confirm(req, res);
   if (action === "delete") return remove(req, res);
@@ -92,7 +98,18 @@ async function grant(req, res) {
     return res.status(status).json({ error: data.error });
   }
 
-  const uploadGrant = await createUploadGrant({ key, contentType, sizeBytes });
+  let uploadGrant;
+  try {
+    uploadGrant = await createUploadGrant({ key, contentType, sizeBytes });
+  } catch (e) {
+    // Roll the pending row back so a provider outage can't eat the caps.
+    console.error("photowall grant creation failed:", e?.message || e);
+    await admin.from("photowall_photos").delete().eq("id", data.id).then(
+      () => {},
+      () => {}
+    );
+    return res.status(500).json({ error: "generic" });
+  }
   return res.status(200).json({ photoId: data.id, key, grant: uploadGrant });
 }
 
@@ -192,8 +209,14 @@ async function pruneStalePending(admin) {
       .lt("created_at", cutoff)
       .limit(10);
     for (const row of stale || []) {
-      await deleteObject({ key: row.object_key, url: row.public_url }).catch(() => {});
-      await admin.from("photowall_photos").delete().eq("id", row.id);
+      try {
+        // Storage first, row second — if the provider is down, keep the row
+        // so a later prune can still find (and delete) the orphaned object.
+        await deleteObject({ key: row.object_key, url: row.public_url });
+        await admin.from("photowall_photos").delete().eq("id", row.id);
+      } catch (e) {
+        console.error("photowall prune skipped a row:", e?.message || e);
+      }
     }
   } catch (e) {
     console.error("photowall prune failed:", e?.message || e);

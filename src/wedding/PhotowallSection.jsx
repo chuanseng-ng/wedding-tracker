@@ -142,7 +142,7 @@ export default function PhotowallSection({ slug }) {
       <div className="wp-section-eyebrow">{t("wedding.photowall.eyebrow")}</div>
       <div className="wp-section-title">{t("wedding.photowall.title")}</div>
 
-      {photos && photos.length > 0 ? (
+      {photos === null ? null : photos.length > 0 ? (
         <div className="wp-gallery-grid" style={{ columnCount: 3, marginTop: 20 }}>
           {photos.map((p) => (
             <figure key={p.id} className="wp-pw-figure">

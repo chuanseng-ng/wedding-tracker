@@ -46,7 +46,13 @@ export async function createUploadGrant({ key, contentType, sizeBytes }) {
       ContentType: contentType,
       ContentLength: sizeBytes,
     }),
-    { expiresIn: 300 }
+    {
+      expiresIn: 300,
+      // The v3 presigner excludes content-type from the signature by default
+      // (aws-sdk-js-v3#3497) — force both headers in so the type/size contract
+      // is actually enforced by the storage service, not just declared.
+      signableHeaders: new Set(["content-type", "content-length"]),
+    }
   );
   return { mode: "put", url, headers: { "Content-Type": contentType } };
 }
