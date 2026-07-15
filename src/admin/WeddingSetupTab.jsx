@@ -116,6 +116,8 @@ const blankForm = {
   primary_meal_event_id: "",
   enable_open_rsvp: false,
   rsvp_pin: "",
+  enable_photowall: false,
+  photowall_pin: "",
 };
 
 // Map a persisted wedding_events row into the local editable draft shape.
@@ -156,6 +158,8 @@ export default function WeddingSetupTab({ wedding, events = [], onSave, onSaveEv
         primary_meal_event_id: wedding.primary_meal_event_id || "",
         enable_open_rsvp: !!wedding.enable_open_rsvp,
         rsvp_pin: wedding.rsvp_pin || "",
+        enable_photowall: !!wedding.enable_photowall,
+        photowall_pin: wedding.photowall_pin || "",
       });
     }
   }, [wedding]);
@@ -237,6 +241,11 @@ export default function WeddingSetupTab({ wedding, events = [], onSave, onSaveEv
       showToast("Please set an RSVP PIN before enabling Open RSVP");
       return;
     }
+    // Same rule for the photowall (#138) — enforced server-side too.
+    if (form.enable_photowall && !cleanPin(form.photowall_pin)) {
+      showToast("Please set a Photowall PIN before enabling the photowall");
+      return;
+    }
     // Flush any event edits first so the meal-event designation references saved ids.
     if (form.enable_smart_rsvp && onSaveEvents) {
       const ok = await onSaveEvents(draftEvents);
@@ -255,6 +264,8 @@ export default function WeddingSetupTab({ wedding, events = [], onSave, onSaveEv
       primary_meal_event_id: form.enable_smart_rsvp ? (form.primary_meal_event_id || null) : null,
       enable_open_rsvp: form.enable_open_rsvp,
       rsvp_pin: cleanPin(form.rsvp_pin),
+      enable_photowall: form.enable_photowall,
+      photowall_pin: cleanPin(form.photowall_pin),
     });
   };
 
@@ -516,6 +527,48 @@ export default function WeddingSetupTab({ wedding, events = [], onSave, onSaveEv
                 Share this PIN on your invitation — it keeps strangers who find the link from
                 filling your guest list. A word or phrase is harder to guess than a short
                 number. Guests opening a personal RSVP link never need it.
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* ── GUEST PHOTOWALL (#138) ── */}
+        <div className="setup-card">
+          <div className="setup-card-hd">
+            <div>
+              <div className="setup-card-title">Guest Photowall</div>
+              <div className="setup-card-sub">
+                Let guests share photos on your wedding page. Photos appear immediately and you
+                can hide or delete any of them from the Photowall tab. Uploads need the PIN
+                below — share it on the invitation or at the venue.
+              </div>
+            </div>
+            <label className="setup-switch">
+              <input
+                type="checkbox"
+                checked={form.enable_photowall}
+                onChange={(e) => setForm((f) => ({ ...f, enable_photowall: e.target.checked }))}
+              />
+              <span className="setup-switch-track" />
+            </label>
+          </div>
+
+          {form.enable_photowall && (
+            <div className="smart-body">
+              <div className="setup-form-group" style={{ maxWidth: 260 }}>
+                <label className="setup-form-label">Photowall PIN (required)</label>
+                <input
+                  className="setup-form-input"
+                  value={form.photowall_pin}
+                  maxLength={MAX_PIN}
+                  onChange={set("photowall_pin")}
+                  placeholder="e.g. say-cheese-2026"
+                />
+              </div>
+              <div className="smart-warn">
+                The PIN keeps strangers who find your page from posting photos. It can be the
+                same as your RSVP PIN, or different — e.g. only revealed on a sign at the
+                venue so uploads start on the day itself.
               </div>
             </div>
           )}

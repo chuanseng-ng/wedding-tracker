@@ -30,6 +30,24 @@ export async function authorizedHelperEmail(req) {
   }
 }
 
+// Couple-only match for actions the helper must not perform (e.g. photowall
+// photo deletion). When no couple email is configured anywhere it falls open
+// to any authorized account (same back-compat stance as isAllowedHelperEmail —
+// the couple is never locked out of their own deployment).
+export function isCoupleEmail(email) {
+  const coupleEmail = (process.env.COUPLE_EMAIL || process.env.VITE_COUPLE_EMAIL || "").trim().toLowerCase();
+  if (!coupleEmail) return true;
+  return typeof email === "string" && email.trim().toLowerCase() === coupleEmail;
+}
+
+// Returns the authenticated caller's email only when it is the couple's
+// account; null otherwise. Fails closed on any token error.
+export async function authorizedCoupleEmail(req) {
+  const email = await authorizedHelperEmail(req);
+  if (!email || !isCoupleEmail(email)) return null;
+  return email;
+}
+
 // Best-effort in-memory rate limit (per warm instance). Not a durable quota,
 // but it caps runaway client retry loops / replayed tokens against metered APIs.
 export function makeRateLimiter({ windowMs, max }) {

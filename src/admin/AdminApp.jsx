@@ -20,6 +20,7 @@ import WishesWrappedTab from "./WishesWrappedTab.jsx";
 import BudgetTab from "./BudgetTab.jsx";
 import RunsheetTab from "./RunsheetTab.jsx";
 import ChecklistTab from "./ChecklistTab.jsx";
+import PhotowallTab from "./PhotowallTab.jsx";
 
 // ─── PAYNOW CONFIG ────────────────────────────────────────────────────────────
 // The host's PayNow-linked mobile number and display name. These are NOT secret
@@ -1062,7 +1063,13 @@ export default function WeddingTracker() {
         const orows = await sb.rpc("get_open_rsvp_admin_config", {});
         openRsvp = Array.isArray(orows) && orows.length ? orows[0] : null;
       } catch { /* RPC absent on un-migrated DBs, or caller is a helper — skip */ }
-      setWedding(base ? { ...base, ...(budget || {}), ...(checklist || {}), ...(openRsvp || {}) } : base);
+      // The photowall pin gets the same couple-only treatment (0011).
+      let photowall = null;
+      try {
+        const prows = await sb.rpc("get_photowall_admin_config", {});
+        photowall = Array.isArray(prows) && prows.length ? prows[0] : null;
+      } catch { /* RPC absent on un-migrated DBs, or caller is a helper — skip */ }
+      setWedding(base ? { ...base, ...(budget || {}), ...(checklist || {}), ...(openRsvp || {}), ...(photowall || {}) } : base);
     } catch {
       showToast("Failed to load wedding details");
     }
@@ -1121,6 +1128,8 @@ export default function WeddingTracker() {
         p_primary_meal_event_id: form.primary_meal_event_id || null,
         p_enable_open_rsvp: !!form.enable_open_rsvp,
         p_rsvp_pin: form.rsvp_pin || "",
+        p_enable_photowall: !!form.enable_photowall,
+        p_photowall_pin: form.photowall_pin || "",
       });
       await loadWedding();
       showToast("Wedding details saved");
@@ -1931,6 +1940,11 @@ export default function WeddingTracker() {
                   ✅ Checklist
                 </button>
               )}
+              {role === "couple" && (
+                <button className={`view-tab ${view === "photowall" ? "active" : ""}`} onClick={() => setView("photowall")}>
+                  📸 Photowall
+                </button>
+              )}
               <button className={`view-tab ${view === "runsheet" ? "active" : ""}`} onClick={() => setView("runsheet")}>
                 📋 Runsheet
               </button>
@@ -2220,6 +2234,8 @@ export default function WeddingTracker() {
               onSave={saveChecklistConfig}
               isCouple={role === "couple"}
             />
+          ) : view === "photowall" && role === "couple" ? (
+            <PhotowallTab showToast={showToast} />
           ) : view === "runsheet" ? (
             <RunsheetTab
               wedding={wedding}
