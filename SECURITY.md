@@ -223,8 +223,16 @@ This project is configured so that:
   - **Residual risks:** photos are world-readable by anyone with the URL
     (unguessable UUID keys, but treat the wall as public); *hiding* a photo
     only removes it from the RPC — the object stays fetchable until the couple
-    *deletes* it; and anyone who learns the PIN can post photos until the
-    couple rotates it (moderation = hide/delete from the Photowall tab).
+    *deletes* it; anyone who learns the PIN can post photos until the couple
+    rotates it (moderation = hide/delete from the Photowall tab); file *bytes*
+    are never content-inspected (the type is locked by the signed grant and
+    the UI re-encodes to real JPEG, but a direct API caller with the PIN could
+    store arbitrary bytes behind an image-labelled URL on the storage domain);
+    and the photo **delete** API follows the repo's fail-open convention —
+    when no `COUPLE_EMAIL` / `VITE_COUPLE_EMAIL` is configured, any authorized
+    signed-in account (including the helper) can delete photos, even though
+    RLS blocks the helper from the table itself. Set `COUPLE_EMAIL` to close
+    that gap.
 
 ## Reporting a vulnerability
 

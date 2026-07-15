@@ -31,17 +31,20 @@ function client() {
   return cachedClient;
 }
 
-// ContentType is signed so the grant can only upload the validated type.
-// ContentLength is deliberately NOT signed — browsers set it themselves and a
-// mismatch fails the whole PUT opaquely; the authoritative size check happens
-// at confirm time via headObject.
-export async function createUploadGrant({ key, contentType }) {
+// ContentType AND ContentLength are signed into the URL: the client declared
+// the exact byte size at grant time and uploads exactly that blob, so the
+// browser's automatic Content-Length matches — while any oversized body an
+// attacker substitutes fails the signature at the storage layer, before any
+// bytes persist. (The confirm-time headObject check remains as the
+// authoritative backstop.)
+export async function createUploadGrant({ key, contentType, sizeBytes }) {
   const url = await getSignedUrl(
     client(),
     new PutObjectCommand({
       Bucket: process.env.R2_BUCKET,
       Key: key,
       ContentType: contentType,
+      ContentLength: sizeBytes,
     }),
     { expiresIn: 300 }
   );
