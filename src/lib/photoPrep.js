@@ -32,6 +32,13 @@ async function decodeToBitmap(file) {
 // Throws Error with .code = "unsupported_image" when the browser can't decode
 // the file (e.g. HEIC outside Safari).
 export async function prepareImage(file) {
+  // Don't even try to decode absurdly large files — decoding happens fully
+  // in the guest's browser memory before any downscaling can help.
+  if (file.size > 40 * 1024 * 1024) {
+    const err = new Error("file too large to process");
+    err.code = "too_large";
+    throw err;
+  }
   let source;
   try {
     source = await decodeToBitmap(file);
@@ -43,6 +50,12 @@ export async function prepareImage(file) {
 
   const srcWidth = source.width || source.naturalWidth;
   const srcHeight = source.height || source.naturalHeight;
+  if (!srcWidth || !srcHeight) {
+    if (typeof source.close === "function") source.close();
+    const err = new Error("decoded to zero dimensions");
+    err.code = "unsupported_image";
+    throw err;
+  }
   const { width, height } = targetDimensions(srcWidth, srcHeight);
 
   const canvas = document.createElement("canvas");

@@ -81,14 +81,20 @@ export default function PhotowallSection({ slug }) {
   const [phase, setPhase] = useState("idle"); // idle|preparing|uploading|done|error
   const [errorKey, setErrorKey] = useState("");
   const fileRef = useRef(null);
+  const loadSeq = useRef(0);
 
   const load = useCallback(() => {
     if (isDemoMode) {
       setPhotos(DEMO_PHOTOWALL);
       return;
     }
+    // Sequence guard: with a 20s poll, a slow response can resolve after a
+    // newer one — only the latest request may set state.
+    const seq = ++loadSeq.current;
     sb.rpc("get_photowall_photos", { p_slug: slug })
-      .then((rows) => setPhotos(Array.isArray(rows) ? rows : []))
+      .then((rows) => {
+        if (loadSeq.current === seq) setPhotos(Array.isArray(rows) ? rows : []);
+      })
       .catch(() => setPhotos((prev) => prev ?? []));
   }, [slug]);
 
@@ -117,6 +123,7 @@ export default function PhotowallSection({ slug }) {
       } catch {
         /* private mode */
       }
+      setPin(cleanPin(pin));
       setPhase("done");
       setCaption("");
       if (fileRef.current) fileRef.current.value = "";

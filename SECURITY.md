@@ -204,7 +204,9 @@ This project is configured so that:
     returned to anon — couple readback via `get_photowall_admin_config`), a
     durable 20-wrong-PINs-per-15-minutes global lockout (RLS-sealed
     `photowall_pin_attempts`), plus a best-effort per-IP limiter in the
-    function. Caps: 8 MB per file, allowlisted image types, 1500 photos total.
+    function. Caps: 4 MB per file, allowlisted image types, 1500 photos total,
+    and at most 50 unconfirmed (pending) grants at a time — stale pendings are
+    pruned after an hour, bounding grant-flood DoS by a pin holder.
   - **File bytes never pass through the serverless function.** The function
     mints a short-lived grant (R2 presigned PUT / Blob client token) locked to
     a server-generated object key and validated content type; the browser

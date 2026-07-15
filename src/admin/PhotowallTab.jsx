@@ -73,7 +73,9 @@ export default function PhotowallTab({ showToast }) {
     setBusyId(photo.id);
     try {
       await sb.setPhotowallStatus(photo.id, next);
-      setPhotos((prev) => prev.map((p) => (p.id === photo.id ? { ...p, status: next } : p)));
+      // Re-fetch rather than patch locally so a concurrent poll can't briefly
+      // flip the row back to its stale state.
+      await load();
       showToast(next === "hidden" ? "Photo hidden from the wall" : "Photo is live again");
     } catch {
       showToast("Could not update photo — check connection");
