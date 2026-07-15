@@ -103,7 +103,9 @@ export default function PhotowallTab({ showToast }) {
         body: JSON.stringify({ action: "delete", photoId: photo.id }),
       });
       if (!res.ok) throw new Error(`delete failed: ${res.status}`);
-      setPhotos((prev) => prev.filter((p) => p.id !== photo.id));
+      // Re-fetch (same as toggleHidden) so an in-flight poll can't briefly
+      // resurrect the just-deleted row.
+      await load();
       showToast("Photo deleted");
     } catch {
       showToast("Could not delete photo — check connection");
