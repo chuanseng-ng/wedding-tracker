@@ -9,6 +9,7 @@ import { sanitizeThemeTokens, isCompleteThemeTokens, themeTokenStyle } from "../
 import { normalizeSectionPhotos } from "../lib/sectionPhotos.js";
 import { normalizeFocalPoint } from "../lib/heroFocalPoint.js";
 import LanguageSwitcher from "../i18n/LanguageSwitcher.jsx";
+import PhotowallSection from "./PhotowallSection.jsx";
 import { Coffee, Diamond, ForkKnife, Wine, Camera, Confetti, CalendarBlank, MapPin, Train, Car, PersonSimpleWalk } from "@phosphor-icons/react";
 
 // Returns the meal type key based on HH:MM time string (24h).
@@ -33,6 +34,11 @@ const FUN_QUESTION_KEYS = {
   best_memory: "wedding.funq.memory",
   first_date:  "wedding.funq.firstdate",
 };
+
+// Build-time kill switch for the guest photowall (#138) — default-on, same
+// pattern as VITE_ENABLE_ANGBAO. The couple additionally opts in at runtime
+// via the enable_photowall column (Wedding Setup).
+const PHOTOWALL_ENABLED = import.meta.env.VITE_ENABLE_PHOTOWALL !== "false";
 
 const DEMO_WEDDING = {
   bride_name: "Siew Yong",
@@ -59,6 +65,7 @@ const DEMO_WEDDING = {
   getting_there: "By MRT: Alight at Orchard MRT (NS22 / TE14), take Exit B and walk 5 minutes along Orchard Road.\n\nBy car: Parking available at the hotel basement. Enter via Orchard Road. First 2 hours complimentary for wedding guests.\n\nDrop-off: Use the main hotel entrance on Orchard Road — our wedding team will be there to welcome you.",
   section_photos: {},
   enable_smart_rsvp: true,
+  enable_photowall: true,
 };
 
 // Smart-RSVP event list for the demo page (#78). On a real deployment this comes
@@ -796,6 +803,12 @@ export default function WeddingPage() {
           )}
 
           {renderGallery("afterGettingThere")}
+
+          {/* Guest photowall (#138) — flag read off the raw wedding record
+              (not the localized overlay), like the other enable_* flags. */}
+          {PHOTOWALL_ENABLED && wedding.enable_photowall && (
+            <PhotowallSection slug={slug} />
+          )}
 
           {/* RSVP CTA */}
           <section className="wp-section wp-cta">

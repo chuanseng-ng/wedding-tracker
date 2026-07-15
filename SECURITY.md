@@ -189,6 +189,51 @@ This project is configured so that:
   templates, subjects are stripped of CR/LF, and the webhook / cron shared
   secrets are compared in constant time (`api/_lib/secureCompare.js`).
 
+- **Guest photowall is the app's second anonymous-write surface** (#138,
+  [`0011_photowall.sql`](supabase/migrations/0011_photowall.sql), opt-in,
+  default off). Photo **files never touch Supabase**: they live in external
+  object storage (Cloudflare R2 or Vercel Blob, `PHOTO_STORAGE_PROVIDER`), and
+  only metadata rows live in `photowall_photos`. The trust model:
+  - **No anon policies on the table at all.** Guest writes go browser →
+    `/api/photowall` (Vercel function) → `begin_photowall_upload` /
+    `confirm_photowall_photo`, which are `security definer` RPCs granted
+    **only to `service_role`**. Anon reads go through `get_photowall_photos`,
+    which returns only `live` rows and only display fields.
+  - **Uploads are PIN-gated** with the same model as open RSVP: a dedicated
+    `photowall_pin` (≤ 20 chars, mandatory when the feature is on, never
+    returned to anon — couple readback via `get_photowall_admin_config`), a
+    durable 20-wrong-PINs-per-15-minutes global lockout (RLS-sealed
+    `photowall_pin_attempts`), plus a best-effort per-IP limiter in the
+    function. Caps: 4 MB per file, allowlisted image types, 1500 photos total,
+    and at most 50 unconfirmed (pending) grants at a time — stale pendings are
+    pruned after an hour, bounding grant-flood DoS by a pin holder.
+  - **File bytes never pass through the serverless function.** The function
+    mints a short-lived grant (R2 presigned PUT / Blob client token) locked to
+    a server-generated object key and validated content type; the browser
+    uploads directly to storage; a confirm step HEAD-verifies the object
+    server-side before the photo goes live. The client never sees storage
+    credentials.
+  - **Storage keys are server-only env vars** (`R2_*`, `BLOB_READ_WRITE_TOKEN`)
+    — never `VITE_`-prefixed.
+  - **Deployer setup (R2 only):** the bucket needs a CORS rule allowing `PUT`
+    from your site origin with the `content-type` header, and a public read
+    surface (r2.dev dev URL or custom domain) for the gallery. A **custom**
+    public domain must also be added to the `img-src` CSP directive in
+    `vercel.json`. Vercel Blob needs neither.
+  - **Residual risks:** photos are world-readable by anyone with the URL
+    (unguessable UUID keys, but treat the wall as public); *hiding* a photo
+    only removes it from the RPC — the object stays fetchable until the couple
+    *deletes* it; anyone who learns the PIN can post photos until the couple
+    rotates it (moderation = hide/delete from the Photowall tab); file *bytes*
+    are never content-inspected (the type is locked by the signed grant and
+    the UI re-encodes to real JPEG, but a direct API caller with the PIN could
+    store arbitrary bytes behind an image-labelled URL on the storage domain);
+    and the photo **delete** API follows the repo's fail-open convention —
+    when no `COUPLE_EMAIL` / `VITE_COUPLE_EMAIL` is configured, any authorized
+    signed-in account (including the helper) can delete photos, even though
+    RLS blocks the helper from the table itself. Set `COUPLE_EMAIL` to close
+    that gap.
+
 ## Reporting a vulnerability
 
 Please open a private security advisory on the repository, or contact the

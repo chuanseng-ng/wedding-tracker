@@ -54,9 +54,10 @@ export const sb = {
     const { error } = await supabase.from(table).delete().eq("id", id);
     if (error) throw error;
   },
-  subscribeToChanges(table, callback) {
-    // Polling fallback for real-time (works without Supabase Realtime setup)
-    const interval = setInterval(callback, 5000);
+  subscribeToChanges(table, callback, intervalMs = 5000) {
+    // Polling fallback for real-time (works without Supabase Realtime setup).
+    // Pass a longer intervalMs for relaxed feeds (e.g. the public photowall).
+    const interval = setInterval(callback, intervalMs);
     return () => clearInterval(interval);
   },
   // Calls a Postgres RPC function (e.g. the public RSVP functions, which are
@@ -97,6 +98,23 @@ export const sb = {
     const { data, error } = await supabase.storage.from("receipts").createSignedUrl(path, 60);
     if (error) throw error;
     return data.signedUrl;
+  },
+
+  // ── Guest photowall (#138) ───────────────────────────────────────────────────
+  // Couple-only moderation, enforced by the photowall_couple_all RLS policy
+  // (0011): list every photo (any status) and hide/unhide. Deletion goes
+  // through /api/photowall so the storage object is removed too.
+  async listPhotowallPhotos() {
+    const { data, error } = await supabase
+      .from("photowall_photos")
+      .select("*")
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    return data;
+  },
+  async setPhotowallStatus(id, status) {
+    const { error } = await supabase.from("photowall_photos").update({ status }).eq("id", id);
+    if (error) throw error;
   },
 
   // ── Vendor CRUD ──────────────────────────────────────────────────────────────
