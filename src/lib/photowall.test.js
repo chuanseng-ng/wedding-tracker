@@ -7,6 +7,7 @@ import {
   cleanCaption,
   photowallErrorKey,
   visiblePhotos,
+  filterPhotosByUploader,
 } from "./photowall.js";
 
 describe("cleanUploaderName / cleanCaption", () => {
@@ -62,6 +63,48 @@ describe("visiblePhotos", () => {
   it("returns [] for non-array input", () => {
     expect(visiblePhotos(null, new Set())).toEqual([]);
     expect(visiblePhotos(undefined, new Set())).toEqual([]);
+  });
+});
+
+describe("filterPhotosByUploader", () => {
+  const rows = [
+    { id: "a", uploader_name: "Aunty May" },
+    { id: "b", uploader_name: "Uncle Bob" },
+    { id: "c", uploader_name: null },
+  ];
+
+  it("returns all photos for an empty query", () => {
+    expect(filterPhotosByUploader(rows, "")).toEqual(rows);
+  });
+
+  it("returns all photos for a whitespace-only query", () => {
+    expect(filterPhotosByUploader(rows, "   ")).toEqual(rows);
+  });
+
+  it("matches case-insensitively", () => {
+    expect(filterPhotosByUploader(rows, "aunty may")).toEqual([rows[0]]);
+    expect(filterPhotosByUploader(rows, "UNCLE")).toEqual([rows[1]]);
+  });
+
+  it("matches partial names", () => {
+    expect(filterPhotosByUploader(rows, "bob")).toEqual([rows[1]]);
+  });
+
+  it("returns an empty list when nothing matches", () => {
+    expect(filterPhotosByUploader(rows, "zzz")).toEqual([]);
+  });
+
+  it('treats a missing uploader name as "Anonymous" (matching the row display)', () => {
+    expect(filterPhotosByUploader(rows, "anon")).toEqual([rows[2]]);
+  });
+
+  it("ignores surrounding whitespace in the query", () => {
+    expect(filterPhotosByUploader(rows, "  bob  ")).toEqual([rows[1]]);
+  });
+
+  it("returns [] for non-array input", () => {
+    expect(filterPhotosByUploader(null, "bob")).toEqual([]);
+    expect(filterPhotosByUploader(undefined, "")).toEqual([]);
   });
 });
 

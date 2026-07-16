@@ -4,6 +4,8 @@
 // too). Follows the Submissions tab's list-of-rows moderation pattern.
 import { useState, useEffect, useCallback } from "react";
 import { sb, supabase, isDemoMode } from "../lib/supabase.js";
+import { filterPhotosByUploader } from "../lib/photowall.js";
+import { Icon } from "../shared/icons.jsx";
 
 const styles = `
   .pw-admin-list { display: flex; flex-direction: column; gap: 10px; }
@@ -43,6 +45,7 @@ function formatTime(iso) {
 
 export default function PhotowallTab({ showToast }) {
   const [photos, setPhotos] = useState(null);
+  const [search, setSearch] = useState("");
   const [busyId, setBusyId] = useState(null);
   // Two-click delete (no browser confirm dialogs in this app): the first
   // click arms the button, the second within the armed state deletes.
@@ -127,6 +130,8 @@ export default function PhotowallTab({ showToast }) {
     );
   }
 
+  const filtered = filterPhotosByUploader(photos, search);
+
   return (
     <>
       <style>{styles}</style>
@@ -140,46 +145,65 @@ export default function PhotowallTab({ showToast }) {
           </div>
         </div>
       ) : (
-        <div className="pw-admin-list">
-          {photos.map((p) => (
-            <div key={p.id} className={`pw-admin-row is-${p.status}`}>
-              {p.public_url ? (
-                <a href={p.public_url} target="_blank" rel="noopener noreferrer">
-                  <img className="pw-admin-thumb" src={p.public_url} alt="" loading="lazy" />
-                </a>
-              ) : (
-                <div className="pw-admin-thumb" />
-              )}
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div className="pw-admin-caption">{p.caption || <em>No caption</em>}</div>
-                <div className="pw-admin-meta">
-                  {p.uploader_name || "Anonymous"} · {formatTime(p.created_at)}
-                </div>
-              </div>
-              <span className={`pw-admin-status ${p.status}`}>{p.status}</span>
-              <div className="pw-admin-actions">
-                {p.status !== "pending" && (
-                  <button
-                    className="btn btn-outline btn-sm"
-                    disabled={busyId === p.id}
-                    onClick={() => toggleHidden(p)}
-                  >
-                    {p.status === "hidden" ? "Unhide" : "Hide"}
-                  </button>
-                )}
-                <button
-                  className={`btn btn-sm ${confirmDeleteId === p.id ? "btn-gold" : "btn-outline"}`}
-                  disabled={busyId === p.id}
-                  onClick={() => deletePhoto(p)}
-                  onBlur={() => setConfirmDeleteId((id) => (id === p.id ? null : id))}
-                  title={confirmDeleteId === p.id ? "Removes the photo and its file permanently" : undefined}
-                >
-                  {confirmDeleteId === p.id ? "Really delete?" : "Delete"}
-                </button>
-              </div>
+        <>
+          <div className="search-wrap" style={{ marginBottom: 14 }}>
+            <Icon.Search />
+            <input
+              className="search-input"
+              placeholder="Search by guest name…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+          {filtered.length === 0 ? (
+            <div className="empty">
+              <div className="empty-icon">📸</div>
+              <div className="empty-text">No photos match</div>
+              <div className="empty-sub">Try a different guest name</div>
             </div>
-          ))}
-        </div>
+          ) : (
+            <div className="pw-admin-list">
+              {filtered.map((p) => (
+                <div key={p.id} className={`pw-admin-row is-${p.status}`}>
+                  {p.public_url ? (
+                    <a href={p.public_url} target="_blank" rel="noopener noreferrer">
+                      <img className="pw-admin-thumb" src={p.public_url} alt="" loading="lazy" />
+                    </a>
+                  ) : (
+                    <div className="pw-admin-thumb" />
+                  )}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div className="pw-admin-caption">{p.caption || <em>No caption</em>}</div>
+                    <div className="pw-admin-meta">
+                      {p.uploader_name || "Anonymous"} · {formatTime(p.created_at)}
+                    </div>
+                  </div>
+                  <span className={`pw-admin-status ${p.status}`}>{p.status}</span>
+                  <div className="pw-admin-actions">
+                    {p.status !== "pending" && (
+                      <button
+                        className="btn btn-outline btn-sm"
+                        disabled={busyId === p.id}
+                        onClick={() => toggleHidden(p)}
+                      >
+                        {p.status === "hidden" ? "Unhide" : "Hide"}
+                      </button>
+                    )}
+                    <button
+                      className={`btn btn-sm ${confirmDeleteId === p.id ? "btn-gold" : "btn-outline"}`}
+                      disabled={busyId === p.id}
+                      onClick={() => deletePhoto(p)}
+                      onBlur={() => setConfirmDeleteId((id) => (id === p.id ? null : id))}
+                      title={confirmDeleteId === p.id ? "Removes the photo and its file permanently" : undefined}
+                    >
+                      {confirmDeleteId === p.id ? "Really delete?" : "Delete"}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
       )}
     </>
   );
