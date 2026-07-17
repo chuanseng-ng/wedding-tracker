@@ -6,6 +6,8 @@ import {
   cleanUploaderName,
   cleanCaption,
   photowallErrorKey,
+  visiblePhotos,
+  filterPhotosByUploader,
 } from "./photowall.js";
 
 describe("cleanUploaderName / cleanCaption", () => {
@@ -36,6 +38,73 @@ describe("photowallErrorKey", () => {
   it("falls back to the generic key for unknown codes", () => {
     expect(photowallErrorKey("weird")).toBe("wedding.photowall.err.generic");
     expect(photowallErrorKey(undefined)).toBe("wedding.photowall.err.generic");
+  });
+});
+
+describe("visiblePhotos", () => {
+  const rows = [
+    { id: "a", public_url: "https://blob.example/a.jpg" },
+    { id: "b", public_url: "https://blob.example/b.jpg" },
+    { id: "c", public_url: "https://blob.example/c.jpg" },
+  ];
+
+  it("filters out rows whose id is in the failed set", () => {
+    expect(visiblePhotos(rows, new Set(["b"]))).toEqual([rows[0], rows[2]]);
+  });
+
+  it("returns all rows when nothing has failed", () => {
+    expect(visiblePhotos(rows, new Set())).toEqual(rows);
+  });
+
+  it("returns an empty list when every image has failed", () => {
+    expect(visiblePhotos(rows, new Set(["a", "b", "c"]))).toEqual([]);
+  });
+
+  it("returns [] for non-array input", () => {
+    expect(visiblePhotos(null, new Set())).toEqual([]);
+    expect(visiblePhotos(undefined, new Set())).toEqual([]);
+  });
+});
+
+describe("filterPhotosByUploader", () => {
+  const rows = [
+    { id: "a", uploader_name: "Aunty May" },
+    { id: "b", uploader_name: "Uncle Bob" },
+    { id: "c", uploader_name: null },
+  ];
+
+  it("returns all photos for an empty query", () => {
+    expect(filterPhotosByUploader(rows, "")).toEqual(rows);
+  });
+
+  it("returns all photos for a whitespace-only query", () => {
+    expect(filterPhotosByUploader(rows, "   ")).toEqual(rows);
+  });
+
+  it("matches case-insensitively", () => {
+    expect(filterPhotosByUploader(rows, "aunty may")).toEqual([rows[0]]);
+    expect(filterPhotosByUploader(rows, "UNCLE")).toEqual([rows[1]]);
+  });
+
+  it("matches partial names", () => {
+    expect(filterPhotosByUploader(rows, "bob")).toEqual([rows[1]]);
+  });
+
+  it("returns an empty list when nothing matches", () => {
+    expect(filterPhotosByUploader(rows, "zzz")).toEqual([]);
+  });
+
+  it('treats a missing uploader name as "Anonymous" (matching the row display)', () => {
+    expect(filterPhotosByUploader(rows, "anon")).toEqual([rows[2]]);
+  });
+
+  it("ignores surrounding whitespace in the query", () => {
+    expect(filterPhotosByUploader(rows, "  bob  ")).toEqual([rows[1]]);
+  });
+
+  it("returns [] for non-array input", () => {
+    expect(filterPhotosByUploader(null, "bob")).toEqual([]);
+    expect(filterPhotosByUploader(undefined, "")).toEqual([]);
   });
 });
 

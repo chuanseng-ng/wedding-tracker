@@ -15,6 +15,21 @@ export const ACCEPTED_INPUT_TYPES = ["image/jpeg", "image/png", "image/webp", "i
 export const cleanUploaderName = (v) => String(v ?? "").trim().slice(0, MAX_UPLOADER_NAME);
 export const cleanCaption = (v) => String(v ?? "").trim().slice(0, MAX_CAPTION);
 
+// Rows whose <img> failed to load are hidden client-side — e.g. the file was
+// deleted straight from the storage dashboard while the DB row stayed live
+// (only the admin Photowall tab's delete removes both file and row).
+export const visiblePhotos = (photos, failedIds) =>
+  Array.isArray(photos) ? photos.filter((p) => !failedIds.has(p.id)) : [];
+
+// Admin Photowall tab search: case-insensitive substring match on uploader
+// name. Unnamed uploads match "Anonymous" — the label the row displays.
+export const filterPhotosByUploader = (photos, query) => {
+  if (!Array.isArray(photos)) return [];
+  const q = String(query ?? "").trim().toLowerCase();
+  if (!q) return photos;
+  return photos.filter((p) => (p.uploader_name || "Anonymous").toLowerCase().includes(q));
+};
+
 // Maps an /api/photowall (or photoPrep) error code to an i18n key — same
 // contract as registerResultErrorKey in openRsvp.js.
 export const photowallErrorKey = (error) => {
