@@ -97,7 +97,11 @@ This project is configured so that:
     `get_checkin_guests()` security-definer projection
     (`0005_roles_security.sql`, extended in `0013`), which omits couple-only
     columns (private `notes`, `angbao_amount`, `rsvp_token`, contact details —
-    the `angbao_given` boolean is included since #151).
+    the `angbao_given` boolean is included since #151). A second read-only
+    projection, `get_wishes_guests()` (`0014`, #149), exposes guests'
+    RSVP well-wish messages (+ name/side/relationship group) to signed-in
+    accounts only, so helpers can run the D-Day Wishes Wrapped presentation —
+    it is not granted to `anon`.
 - **Google Fonts** is loaded from an external origin (allow-listed in the CSP).
   Self-hosting the fonts would remove this dependency.
 - **`VITE_ENABLE_ANGBAO=false` is a UI toggle, not a security control.** Disabling

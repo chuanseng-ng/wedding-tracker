@@ -60,6 +60,11 @@ begin;
   select * from public.set_guest_angbao_received(
     (select id from public.guests order by created_at limit 1), true);
 
+  -- Read-only wishes projection for the D-Day presentation (#149) —
+  -- helper-callable; row type is exactly id/name/party/relationship_group/
+  -- rsvp_status/rsvp_message (no contact details, notes, or financials):
+  select count(*) as wishes_via_projection from public.get_wishes_guests();  -- expect: real count
+
   -- Config-write RPCs are security definer (bypass RLS) but internally gated
   -- (#101) — each must raise `insufficient_privilege` (42501).
   -- Uncomment ONE at a time: the raised error aborts the transaction, so after
@@ -82,6 +87,7 @@ begin;
   -- select public.get_checklist_config();                          -- expect: permission denied for function
   -- select public.upsert_checklist_config('[]'::jsonb);            -- expect: permission denied for function
   -- select public.get_checkin_guests();                            -- expect: permission denied for function
+  -- select * from public.get_wishes_guests();                       -- expect: permission denied for function
   -- select public.upsert_runsheet('[]'::jsonb, false);              -- expect: permission denied for function
   -- The published-runsheet read stays anon-callable BY DESIGN (public page):
   -- select * from public.get_public_runsheet('some-slug');          -- expect: succeeds (0 or 1 rows, no error)

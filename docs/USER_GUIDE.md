@@ -431,7 +431,11 @@ Priya Nair,2,,false,bride
 3. Track angbaos directly on the **Guest List** — checking a guest in pops up a
    "🧧 Angbao received?" prompt, and every guest card carries the received
    toggle (helpers included; dollar amounts remain couple-only)
-4. Export an attendance report afterwards
+4. Put filler content on the projector straight from the D-Day tabs (helpers
+   included, no couple login needed): **📸 Photowall** runs an auto-advancing
+   fullscreen slideshow of approved guest photos, and **✨ Wishes** generates
+   the Wishes Wrapped presentation from guests' RSVP messages
+5. Export an attendance report afterwards
 
 ---
 

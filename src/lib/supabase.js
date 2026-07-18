@@ -90,6 +90,15 @@ export const sb = {
     if (error) throw error;
     return Array.isArray(data) ? data[0] : data;
   },
+  // Read-only wishes projection for the D-Day Wishes Wrapped presentation
+  // (#149): name/side/relationship-group/RSVP status/message only — the
+  // helper's sanctioned path to well-wishes (direct guest selects are
+  // couple-only and get_checkin_guests strips rsvp_message).
+  async getWishesGuests() {
+    const { data, error } = await supabase.rpc("get_wishes_guests", {});
+    if (error) throw error;
+    return data || [];
+  },
   // D-Day check-in. Routes through the `set_guest_checkin` security-definer RPC so
   // the bridal-team (helper) account — which since #92 has no direct UPDATE on
   // guests — can still check guests in. The RPC touches only the check-in columns

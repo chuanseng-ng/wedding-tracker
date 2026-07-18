@@ -23,6 +23,7 @@ import BudgetTab from "./BudgetTab.jsx";
 import RunsheetTab from "./RunsheetTab.jsx";
 import ChecklistTab from "./ChecklistTab.jsx";
 import PhotowallTab from "./PhotowallTab.jsx";
+import PhotowallSlideshowTab from "./PhotowallSlideshowTab.jsx";
 
 // ─── PAYNOW CONFIG ────────────────────────────────────────────────────────────
 // The host's PayNow-linked mobile number and display name. These are NOT secret
@@ -37,6 +38,9 @@ const PAYNOW_NAME = import.meta.env.VITE_PAYNOW_NAME || "";
 // events where collecting ang-bao isn't applicable. Existing angbao data in the
 // DB is preserved and reappears if the feature is re-enabled. Default = enabled.
 const ANGBAO_ENABLED = import.meta.env.VITE_ENABLE_ANGBAO !== "false";
+// Same build-time flag the public page honors (#138); the D-Day slideshow tab
+// additionally needs the couple to have enabled the photowall in Wedding Setup.
+const PHOTOWALL_ENABLED = import.meta.env.VITE_ENABLE_PHOTOWALL !== "false";
 
 // ─── DEMO MODE (no Supabase) ──────────────────────────────────────────────────
 const DEMO_GUESTS = [
@@ -832,6 +836,10 @@ export default function WeddingTracker() {
   const [syncing, setSyncing] = useState(false);
   const [activePopup, setActivePopup] = useState(null); // guest id
   const [angbaoPrompt, setAngbaoPrompt] = useState(null); // guest to ask "🧧 received?" for after check-in (#151)
+  // Helper-side wishes data (#149): the helper's guest rows carry no
+  // rsvp_message, so the D-Day Wishes tab lazily fetches the read-only
+  // get_wishes_guests projection on first open. null = not fetched yet.
+  const [wishesGuests, setWishesGuests] = useState(null);
   const [route, setRoute] = useState(() => window.location.hash.replace(/^#\/?/, ""));
   const [submissions, setSubmissions] = useState([]);
   const [approveSub, setApproveSub] = useState(null); // submission being reviewed
@@ -1985,13 +1993,32 @@ export default function WeddingTracker() {
               <button className={`view-tab ${view === "runsheet" ? "active" : ""}`} onClick={() => setView("runsheet")}>
                 📋 Runsheet
               </button>
+              {/* D-Day presentation tabs (#149) — view-only filler content for
+                  the projector, available to BOTH roles so helpers can run
+                  them without the couple logging in. */}
+              {PHOTOWALL_ENABLED && (
+                <button className={`view-tab ${view === "photowall-live" ? "active" : ""}`} onClick={() => setView("photowall-live")}>
+                  📸 Photowall
+                </button>
+              )}
+              <button
+                className={`view-tab ${view === "wishes-wrapped" ? "active" : ""}`}
+                onClick={() => {
+                  setView("wishes-wrapped");
+                  if (role === "helper" && wishesGuests === null && !isDemoMode) {
+                    sb.getWishesGuests().then(setWishesGuests).catch(() => syncFail());
+                  }
+                }}
+              >
+                ✨ Wishes
+              </button>
             </>
           )}
         </div>
 
         {/* TOOLBAR */}
         <div className="toolbar">
-          {mode === "dday" && (
+          {mode === "dday" && (view === "guests" || view === "tables") && (
             <>
               <div className="search-wrap">
                 <Icon.Search />
@@ -2021,7 +2048,7 @@ export default function WeddingTracker() {
               </button>
             </>
           )}
-          {mode === "dday" && (
+          {mode === "dday" && view !== "photowall-live" && view !== "wishes-wrapped" && (
             <>
               {role !== "helper" && (
                 <>
@@ -2051,7 +2078,7 @@ export default function WeddingTracker() {
 
           {loading ? (
             <div className="empty"><div className="empty-icon">⏳</div><div className="empty-text">Loading guests…</div></div>
-          ) : guestLoadError && guests.length === 0 && view !== "wedding-page" && view !== "wishes-wrapped" && view !== "budget" && view !== "submissions" ? (
+          ) : guestLoadError && guests.length === 0 && view !== "wedding-page" && view !== "wishes-wrapped" && view !== "photowall-live" && view !== "budget" && view !== "submissions" ? (
             // Only block guest-dependent views. Wedding Page (renders from `wedding`),
             // Wishes Wrapped (own empty state), Budget (vendors/config) and Submissions
             // don't need the guest list, so a guest-load error shouldn't hide them.
@@ -2236,7 +2263,11 @@ export default function WeddingTracker() {
           ) : view === "wedding-page" ? (
             <WeddingPageTab wedding={wedding} onSave={saveWeddingPage} showToast={showToast} />
           ) : view === "wishes-wrapped" ? (
-            <WishesWrappedTab guests={guests} wedding={wedding} />
+            /* Helpers pass the wishes projection (#149); the couple's own guest
+               rows already carry rsvp_message. */
+            <WishesWrappedTab guests={role === "helper" ? (wishesGuests || []) : guests} wedding={wedding} />
+          ) : view === "photowall-live" && PHOTOWALL_ENABLED ? (
+            <PhotowallSlideshowTab wedding={wedding} />
           ) : view === "budget" ? (
             <BudgetTab
               wedding={wedding}
