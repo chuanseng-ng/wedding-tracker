@@ -3,6 +3,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { buildPayNowPayload, normalizeMobile } from "../paynow";
 import { sb, isDemoMode, supabase, COUPLE_EMAIL, HELPER_EMAIL, getRole } from "../lib/supabase.js";
 import { applyCheckin } from "../lib/checkin.js";
+import { nextFreeDraw, applyDrawRelease } from "../lib/draw.js";
 import { guestFetchPlan } from "../lib/guestSource.js";
 import { cleanName, cleanNotes, cleanTable, cleanParty, cleanAmount, MAX_ANGBAO } from "../lib/validation.js";
 import { parseCSV, toCSV, guestImportTemplateCSV } from "../lib/csv.js";
@@ -1439,13 +1440,15 @@ export default function WeddingTracker() {
   };
 
   // Mint (or re-read) a guest's lucky-draw number once their angbao is
-  // confirmed. Assign-once: a guest who already has a number keeps it. Returns
-  // the number, or null if it could not be assigned.
+  // confirmed. A guest who already holds a number keeps it; since #150 the pool
+  // is reusable — unmarking releases the number (releaseDraw below) and a
+  // re-mark mints the lowest free number afresh. Returns the number, or null if
+  // it could not be assigned.
   const mintDraw = async (guest) => {
     if (guest.draw_number) return guest.draw_number;
     let n;
     if (isDemoMode) {
-      n = guests.reduce((m, g) => Math.max(m, g.draw_number || 0), 0) + 1;
+      n = nextFreeDraw(guests);
     } else {
       try { n = await sb.assignDraw(guest.id); }
       catch { syncFail("Lucky-draw number not assigned — check connection"); return null; }
@@ -1454,19 +1457,38 @@ export default function WeddingTracker() {
     return n;
   };
 
-  // Toggle angbao (undoable). Confirming an angbao also mints the guest's stable
-  // lucky-draw number; clearing it keeps the number (assign-once).
+  // Release a guest's lucky-draw number back to the pool (#150). Optimistic
+  // clear + release_draw_number RPC; on failure the 5s poll reconciles.
+  const releaseDraw = async (guest) => {
+    setGuests((g) => g.map((x) => (x.id === guest.id ? applyDrawRelease(x) : x)));
+    if (isDemoMode) return;
+    try { await sb.releaseDraw(guest.id); }
+    catch { syncFail(); }
+  };
+
+  // Toggle angbao (undoable). Confirming an angbao mints the guest's lucky-draw
+  // number; clearing it releases the number back to the pool (#150), so a later
+  // re-mark mints afresh (possibly, but not necessarily, the same number). Undo
+  // performs the full inverse, including the mint/release.
   const toggleAngbao = async (guest) => {
     const becomingGiven = !guest.angbao_given;
     const updated = { ...guest, angbao_given: becomingGiven };
     if (!becomingGiven) updated.angbao_amount = 0;
     const ok = await persist(guest.id, { angbao_given: updated.angbao_given, angbao_amount: updated.angbao_amount }, updated);
     if (!ok) return;
-    const undo = () => { setToast(null); persist(guest.id, { angbao_given: guest.angbao_given, angbao_amount: guest.angbao_amount }, guest); };
+    const undo = async () => {
+      setToast(null);
+      const restored = applyDrawRelease(guest);
+      const ok2 = await persist(guest.id, { angbao_given: guest.angbao_given, angbao_amount: guest.angbao_amount }, restored);
+      if (!ok2) return;
+      if (becomingGiven) await releaseDraw(guest); // undo a mark: give the fresh number back
+      else await mintDraw(restored);               // undo an unmark: mint afresh
+    };
     if (becomingGiven) {
       const n = await mintDraw(updated);
       showToast(n ? `🧧 ${guest.name} — angbao received · Draw #${n}` : `🧧 ${guest.name} — angbao received`, undo);
     } else {
+      await releaseDraw(updated);
       showToast(`${guest.name} — angbao cleared`, undo);
     }
   };

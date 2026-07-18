@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { checkinArgs } from "./checkin.js";
+import { releaseDrawArgs } from "./draw.js";
 
 // ─── SUPABASE CONFIG ──────────────────────────────────────────────────────────
 // Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your .env file
@@ -67,12 +68,18 @@ export const sb = {
     if (error) throw error;
     return data;
   },
-  // Atomically mint (or re-read) a guest's lucky-draw number. See the
-  // assign_draw_number migration — distinct, assign-once, collision-free.
+  // Atomically mint (or re-read) a guest's lucky-draw number. Since #150 the
+  // allocator (migration 0012) hands out the lowest free number — distinct,
+  // collision-free, and released numbers are reused.
   async assignDraw(guestId) {
     const { data, error } = await supabase.rpc("assign_draw_number", { p_guest_id: guestId });
     if (error) throw error;
     return data;
+  },
+  // Return a guest's lucky-draw number to the pool (angbao unmarked, #150).
+  async releaseDraw(guestId) {
+    const { error } = await supabase.rpc("release_draw_number", releaseDrawArgs(guestId));
+    if (error) throw error;
   },
   // D-Day check-in. Routes through the `set_guest_checkin` security-definer RPC so
   // the bridal-team (helper) account — which since #92 has no direct UPDATE on
