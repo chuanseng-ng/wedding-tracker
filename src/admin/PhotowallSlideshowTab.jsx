@@ -112,13 +112,18 @@ export default function PhotowallSlideshowTab({ wedding }) {
 
   const photo = show.photos[Math.min(show.index, show.photos.length - 1)];
   return (
-    <div>
+    // Fullscreen targets the ROOT wrapper so the ◀ ▶ / exit controls stay on
+    // screen — fullscreening only the photo pane would hide its siblings and
+    // trap touch users (no Esc key).
+    <div
+      ref={containerRef}
+      style={isFullscreen ? { background: "#111", display: "flex", flexDirection: "column", height: "100vh" } : undefined}
+    >
       <div
-        ref={containerRef}
         style={{
           position: "relative", background: "#111", borderRadius: isFullscreen ? 0 : "var(--radius)",
           overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center",
-          height: isFullscreen ? "100vh" : "min(72vh, 640px)",
+          ...(isFullscreen ? { flex: 1, minHeight: 0 } : { height: "min(72vh, 640px)" }),
         }}
       >
         <img
@@ -149,7 +154,10 @@ export default function PhotowallSlideshowTab({ wedding }) {
           {show.index + 1} / {show.photos.length}
         </div>
       </div>
-      <div style={{ display: "flex", justifyContent: "center", gap: "10px", marginTop: "14px" }}>
+      <div style={{
+        display: "flex", justifyContent: "center", gap: "10px",
+        ...(isFullscreen ? { padding: "12px 0 16px", background: "#111" } : { marginTop: "14px" }),
+      }}>
         <button className="btn btn-outline btn-sm" onClick={() => advance(-1)} aria-label="Previous photo">◀</button>
         <button className="btn btn-outline btn-sm" onClick={() => advance(1)} aria-label="Next photo">▶</button>
         <button className="btn btn-gold btn-sm" onClick={toggleFullscreen}>

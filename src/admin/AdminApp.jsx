@@ -2005,8 +2005,10 @@ export default function WeddingTracker() {
                 className={`view-tab ${view === "wishes-wrapped" ? "active" : ""}`}
                 onClick={() => {
                   setView("wishes-wrapped");
-                  if (role === "helper" && wishesGuests === null && !isDemoMode) {
-                    sb.getWishesGuests().then(setWishesGuests).catch(() => syncFail());
+                  // Re-fetch on every open so late RSVPs still show up during
+                  // the event; stale data stays on screen while it refreshes.
+                  if (role === "helper" && !isDemoMode) {
+                    sb.getWishesGuests().then(setWishesGuests).catch(() => syncFail("Could not load wishes — check connection"));
                   }
                 }}
               >
