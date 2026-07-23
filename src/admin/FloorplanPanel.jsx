@@ -16,7 +16,8 @@ const styles = `
   .fp-panel { display: flex; flex-direction: column; gap: 10px; }
   .fp-strip { display: flex; gap: 12px; flex-wrap: wrap; }
   .fp-card { width: 180px; background: white; border-radius: 8px; box-shadow: var(--shadow); overflow: hidden; display: flex; flex-direction: column; }
-  .fp-thumb { width: 100%; height: 110px; object-fit: cover; cursor: zoom-in; display: block; background: var(--warm-white); }
+  .fp-thumb-button { width: 100%; border: 0; padding: 0; background: transparent; cursor: zoom-in; display: block; }
+  .fp-thumb { width: 100%; height: 110px; object-fit: cover; display: block; background: var(--warm-white); }
   .fp-card-body { padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
   .fp-label { font-size: 12px; color: var(--charcoal); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .fp-label-input { width: 100%; padding: 4px 6px; border: 1px solid rgba(201,168,76,0.3); border-radius: 6px; font-family: 'DM Sans', sans-serif; font-size: 12px; color: var(--charcoal); }
@@ -131,13 +132,14 @@ export default function FloorplanPanel({ floorplans, isReadOnly, onSave, showToa
       <div className="fp-strip">
         {floorplans.map((f) => (
           <div className="fp-card" key={f.id}>
-            <img
-              className="fp-thumb"
-              src={f.url}
-              alt={f.label || "Floorplan"}
-              loading="lazy"
+            <button
+              type="button"
+              className="fp-thumb-button"
+              aria-label={`View ${f.label || "floorplan"} fullscreen`}
               onClick={() => setViewer(f)}
-            />
+            >
+              <img className="fp-thumb" src={f.url} alt="" loading="lazy" />
+            </button>
             <div className="fp-card-body">
               {isReadOnly ? (
                 f.label && <div className="fp-label">{f.label}</div>
