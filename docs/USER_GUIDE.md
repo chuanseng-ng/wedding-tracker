@@ -77,6 +77,8 @@ including against a database that already ran the pre-consolidation files.
 > a fully up-to-date schema is unchanged, and a partially-migrated one (e.g. a
 > deployment that never ran `0013_floorplans`) gets exactly the missing pieces.
 
+Deployments that predate the *first* consolidation (the original 19-file layout) follow the round-1 note below instead — its cleanup list covers the old `0001`–`0019` versions.
+
 > **Supabase CLI users (pre-consolidation deployments, round 1):** the migration
 > folder was originally consolidated from 19 files down to 7.
 > If you applied the old files via `supabase db push`, the CLI's tracking table still
