@@ -5,6 +5,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [2026-07-23] — Migrations consolidated: 13 files → 9 domain files
+
+### Changed
+
+- **Migrations consolidated (round 2)** — the six feature migrations `0008_extra_notice`, `0009_open_rsvp`, `0010_event_audiences`, `0011_photowall`, `0012_dday_helper_features` and `0013_floorplans` were folded back into the domain files, so every object again appears exactly once, in its final form (~1,000 duplicated lines removed; `get_wedding_config` alone existed in 4 progressively-larger copies). The `weddings` feature columns (extra notice, open-RSVP/photowall flags + pins, floorplans) moved into `0003_weddings_page.sql`; `audience_groups` and the final config RPCs into `0004_smart_rsvp.sql`; the lucky-draw pool into `0001_core.sql`; the helper angbao/wishes RPCs into `0005_roles_security.sql`; `upsert_floorplans` into `0006_planning_features.sql`. The remaining feature-specific objects live in two renumbered files, `0008_open_rsvp.sql` and `0009_photowall.sql` — migrations now number **0001–0009**. Every surviving function body is byte-identical to its previous final version (verified by an empty `pg_dump --schema-only` diff before/after, and by applying the two new files onto an already-migrated schema — a no-op). Also fixes a latent idempotency gap (`upsert_wedding_config` was not re-runnable since 0011) and a stale `assign_draw_number` comment re-applied by 0005. **Existing CLI deployments:** run the one-time `schema_migrations` cleanup in `docs/USER_GUIDE.md` §1a (delete versions `0001`–`0013` — the domain files gained content but kept their version numbers, so they must replay) before the next `supabase db push`; the push then replays all 9 idempotent files, filling in anything a partially-migrated database is missing (including floorplans for deployments that never ran `0013`).
+
+---
+
+## [2026-07-23] — Floorplan snapshots for couple & helper views (#162)
+
+### Added
+
+- **Floorplan/layout snapshots (#162)** — the couple can upload up to 6 venue floorplan / layout snapshot images (with optional labels) in **Planning → Seating**; both couple and helper see them read-only atop the **D-Day → Tables** view for day-of layout verification, with a tap-to-enlarge fullscreen viewer. Images are re-encoded client-side (`prepareImage`, EXIF-stripped JPEG) and stored in the existing public `wedding-photos` bucket under `floorplans/` (couple-only writes, world-readable by unguessable URL — see SECURITY.md). Metadata lives in a new `weddings.floorplans` JSONB column written through the couple-gated `upsert_floorplans` RPC (migration `0013_floorplans.sql`); it is read via the authenticated `weddings` select so helpers can view it, and is deliberately kept out of the anon-granted `get_wedding_config()`. New pure module `src/lib/floorplan.js` (cap/label/normalize helpers) with colocated tests.
+
+---
+
 ## [2026-07-21] — RSVP QR codes & CSV import dedupe (#155 / #154)
 
 ### Added
