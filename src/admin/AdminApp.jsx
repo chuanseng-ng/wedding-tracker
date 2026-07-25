@@ -1018,7 +1018,13 @@ export default function WeddingTracker() {
     return unsub;
   }, [loadGuests]);
 
+  // Guards against a stale role-specific load overwriting a newer one: loadWedding
+  // is re-created on `role`, so the initial (role-unresolved) request and the
+  // role-triggered request can be in flight together — only the latest may commit.
+  const weddingLoadGeneration = useRef(0);
+
   const loadWedding = useCallback(async () => {
+    const generation = ++weddingLoadGeneration.current;
     if (isDemoMode) {
       setWedding(DEMO_WEDDING);
       return;
@@ -1074,9 +1080,14 @@ export default function WeddingTracker() {
         }
         floorplans = normalizeFloorplans(raw);
       } catch { /* column/RPC absent on un-migrated DBs — feature stays hidden */ }
-      setWedding(base ? { ...base, ...(budget || {}), ...(checklist || {}), ...(openRsvp || {}), ...(photowall || {}), floorplans } : base);
+      // Only the latest load may commit — a slower stale request must not clobber it.
+      if (generation === weddingLoadGeneration.current) {
+        setWedding(base ? { ...base, ...(budget || {}), ...(checklist || {}), ...(openRsvp || {}), ...(photowall || {}), floorplans } : base);
+      }
     } catch {
-      showToast("Failed to load wedding details");
+      if (generation === weddingLoadGeneration.current) {
+        showToast("Failed to load wedding details");
+      }
     }
     // A role flip re-creates this callback (see loadGuests): a helper sign-in
     // re-runs the fetch so floorplans reload via the get_wedding_floorplans
