@@ -21,12 +21,20 @@ const ALLOWLIST = {
   // Components APIs. This is a client-side SPA rendered with <BrowserRouter>
   // (src/main.jsx) and uses none of the RSC/data-router APIs, so it is not
   // exploitable here. There is no patched 7.x; the only fix is a major upgrade
-  // to react-router v8.3.0. Revisit when migrating to react-router v8.
+  // to react-router v8.3.0. Revisit before adopting ANY unstable RSC/data-router
+  // APIs (which would make it apply even on 7.x) or migrating to react-router v8.
   "GHSA-qwww-vcr4-c8h2":
-    "react-router RSC-mode CSRF; not exploitable in a <BrowserRouter> SPA (no RSC APIs). No 7.x fix — revisit on the v8 upgrade.",
+    "react-router RSC-mode CSRF; not exploitable in a <BrowserRouter> SPA (no RSC APIs). No 7.x fix — revisit before adopting unstable RSC APIs or upgrading to v8.",
 };
 
 const BLOCKING = new Set(["high", "critical"]);
+
+function failClosed(reason) {
+  // A security gate must never pass because the audit itself failed to produce a
+  // report (registry down, network error, npm crash). Block the build instead.
+  console.error(`✖ ${reason} — failing closed.`);
+  process.exit(1);
+}
 
 function runAudit() {
   try {
@@ -34,20 +42,37 @@ function runAudit() {
     return execSync("npm audit --json", { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
   } catch (err) {
     // npm audit exits non-zero when vulnerabilities exist, but still prints the
-    // JSON report to stdout — that is the normal path here.
+    // JSON report to stdout — that is the normal path here. No stdout means the
+    // audit command itself failed.
     if (err.stdout) return err.stdout;
-    throw err;
+    failClosed(`npm audit could not run (${err.message})`);
   }
 }
 
-const report = JSON.parse(runAudit());
+let report;
+try {
+  report = JSON.parse(runAudit());
+} catch {
+  failClosed("npm audit did not return parseable JSON");
+}
+
+// Fail closed on an error report or a payload with no vulnerabilities map: npm
+// emits `{ "error": {...} }` (e.g. registry unreachable) instead of a real
+// report, and treating a missing `vulnerabilities` as "clean" would let the gate
+// pass without evaluating a single advisory.
+if (report.error) {
+  failClosed(`npm audit reported an error (${report.error.summary ?? JSON.stringify(report.error)})`);
+}
+if (typeof report.vulnerabilities !== "object" || report.vulnerabilities === null) {
+  failClosed("npm audit report has no vulnerabilities section");
+}
 
 // Collect unique advisories from every vulnerability's `via` entries. Object
 // `via` entries are concrete advisories (with a GHSA url); string entries are
 // just "vulnerable because it depends on <pkg>" links and carry no id of their
 // own, so the advisory is always caught on the package that actually bears it.
 const advisories = new Map(); // ghsaId -> { title, severity, module, url }
-for (const vuln of Object.values(report.vulnerabilities ?? {})) {
+for (const vuln of Object.values(report.vulnerabilities)) {
   for (const via of vuln.via ?? []) {
     if (typeof via !== "object" || !via.url) continue;
     const id = via.url.split("/").pop();
