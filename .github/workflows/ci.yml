@@ -20,5 +20,7 @@ jobs:
       - run: npm run lint
       - run: npm test
       - run: npm run build
-      # Fail the build if a dependency has a high or critical advisory.
-      - run: npm audit --audit-level=high
+      # Fail the build if a dependency has a high or critical advisory, except
+      # for a small documented allowlist of advisories that don't apply to this
+      # app (see scripts/security-audit.mjs).
+      - run: node scripts/security-audit.mjs
