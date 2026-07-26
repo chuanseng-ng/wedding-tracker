@@ -6,6 +6,7 @@ import { applyCheckin } from "../lib/checkin.js";
 import { nextFreeDraw } from "../lib/draw.js";
 import { shouldPromptAngbao, applyAngbaoReceived } from "../lib/angbao.js";
 import { guestFetchPlan } from "../lib/guestSource.js";
+import { weddingFloorplansPlan } from "../lib/weddingSource.js";
 import { cleanName, cleanNotes, cleanTable, cleanParty, cleanAmount, MAX_ANGBAO } from "../lib/validation.js";
 import { parseCSV, dedupeGuestImports, toCSV, guestImportTemplateCSV } from "../lib/csv.js";
 import { formatTime } from "../lib/format.js";
@@ -1017,7 +1018,13 @@ export default function WeddingTracker() {
     return unsub;
   }, [loadGuests]);
 
+  // Guards against a stale role-specific load overwriting a newer one: loadWedding
+  // is re-created on `role`, so the initial (role-unresolved) request and the
+  // role-triggered request can be in flight together — only the latest may commit.
+  const weddingLoadGeneration = useRef(0);
+
   const loadWedding = useCallback(async () => {
+    const generation = ++weddingLoadGeneration.current;
     if (isDemoMode) {
       setWedding(DEMO_WEDDING);
       return;
@@ -1052,21 +1059,40 @@ export default function WeddingTracker() {
         const prows = await sb.rpc("get_photowall_admin_config", {});
         photowall = Array.isArray(prows) && prows.length ? prows[0] : null;
       } catch { /* RPC absent on un-migrated DBs, or caller is a helper — skip */ }
-      // Floorplans (#162) are read straight off the weddings row: the
-      // weddings_select RLS policy covers both roles (helper included), while
-      // get_wedding_config stays floorplan-free so anon never sees them.
+      // Floorplans (#162) are read off the weddings row. Since the weddings_select
+      // RLS policy is couple-only (0010), the helper can't select the row directly,
+      // so it reads floorplans through the get_wedding_floorplans security-definer
+      // projection (which exposes ONLY that column); the couple keeps the direct
+      // select. Either way get_wedding_config stays floorplan-free so anon never
+      // sees them. See src/lib/weddingSource.js.
       let floorplans = [];
       try {
-        const { data: frows, error: ferr } = await supabase
-          .from("weddings").select("floorplans").limit(1);
-        if (ferr) throw ferr;
-        floorplans = normalizeFloorplans(frows?.[0]?.floorplans);
-      } catch { /* column absent on un-migrated DBs — feature stays hidden */ }
-      setWedding(base ? { ...base, ...(budget || {}), ...(checklist || {}), ...(openRsvp || {}), ...(photowall || {}), floorplans } : base);
+        const plan = weddingFloorplansPlan(role);
+        let raw;
+        if (plan.kind === "rpc") {
+          const rows = await sb.rpc(plan.fn, {});
+          raw = Array.isArray(rows) && rows.length ? rows[0].floorplans : null;
+        } else {
+          const { data: frows, error: ferr } = await supabase
+            .from(plan.table).select(plan.column).limit(1);
+          if (ferr) throw ferr;
+          raw = frows?.[0]?.floorplans;
+        }
+        floorplans = normalizeFloorplans(raw);
+      } catch { /* column/RPC absent on un-migrated DBs — feature stays hidden */ }
+      // Only the latest load may commit — a slower stale request must not clobber it.
+      if (generation === weddingLoadGeneration.current) {
+        setWedding(base ? { ...base, ...(budget || {}), ...(checklist || {}), ...(openRsvp || {}), ...(photowall || {}), floorplans } : base);
+      }
     } catch {
-      showToast("Failed to load wedding details");
+      if (generation === weddingLoadGeneration.current) {
+        showToast("Failed to load wedding details");
+      }
     }
-  }, []);
+    // A role flip re-creates this callback (see loadGuests): a helper sign-in
+    // re-runs the fetch so floorplans reload via the get_wedding_floorplans
+    // projection instead of the now-denied direct select.
+  }, [role]);
 
   const loadEvents = useCallback(async () => {
     if (isDemoMode) return; // demo events are edited locally, not persisted

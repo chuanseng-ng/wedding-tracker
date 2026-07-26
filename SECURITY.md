@@ -63,9 +63,21 @@ This project is configured so that:
   floorplan/layout images live in the *public* `wedding-photos` bucket (under
   `floorplans/`, unguessable ids), so anyone who obtains a URL can view the
   image — don't upload anything secret. Metadata writes are couple-only via the
-  `upsert_floorplans` RPC (`0006_planning_features.sql`); the helper's read-only view relies on the
-  authenticated `weddings_select` policy, and the column is deliberately kept
-  out of the anon-granted `get_wedding_config()`.
+  `upsert_floorplans` RPC (`0006_planning_features.sql`); the helper's read-only
+  view reads the floorplan column through the `get_wedding_floorplans()`
+  security-definer projection (`0010_weddings_helper_read_hardening.sql`), which
+  exposes only that column, and the column is deliberately kept out of the
+  anon-granted `get_wedding_config()`.
+- **The `weddings` row itself is couple-only for direct reads
+  (`0010_weddings_helper_read_hardening.sql`).** The `weddings_select` RLS policy
+  is `using (not is_helper())`, so a signed-in helper cannot `select` the row
+  directly. This closes a gap where the earlier `using (true)` policy let a
+  helper read couple-only columns (`overall_budget_cap`, `budget_categories`,
+  `checklist`, `rsvp_pin`, `photowall_pin`) straight off the table, bypassing the
+  couple-only reader RPCs (`get_budget_config`, `get_checklist_config`,
+  `get_open_rsvp_admin_config`, `get_photowall_admin_config`) that are meant to
+  hide them (RLS filters rows, not columns). The only column the helper still
+  needs — `floorplans` — is served by the projection above.
 - **Shared credential.** Every helper uses the same bridal-team login, so anyone
   who learns the bridal-team access code can use the D-Day features. This matches
   the operational model (a small group of trusted helpers on the day).

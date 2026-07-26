@@ -42,6 +42,16 @@ begin;
   -- to eyeball the shape. Since #151 it DOES include the angbao_given boolean;
   -- the amount and every other financial column stay excluded.)
 
+  -- Direct weddings select is DENIED for the helper (0010) — the row carries
+  -- couple-only columns (overall_budget_cap, budget_categories, checklist,
+  -- rsvp_pin, photowall_pin) that RLS can't hide per-column, so the whole row is
+  -- couple-only. The helper reads only floorplans, via the projection RPC:
+  select count(*) as weddings_direct_select from public.weddings;             -- expect: 0
+  select count(*) as floorplans_via_projection from public.get_wedding_floorplans();  -- expect: 1
+  -- (Sanity: the projection's row type is exactly one `floorplans jsonb` column —
+  -- no budget/checklist/pin columns exist to leak. `select * from
+  -- public.get_wedding_floorplans()` to eyeball the shape.)
+
   -- Writes must all be refused (0 rows changed, or an RLS error):
   update public.guests set notes = 'hack' where true;              -- expect: 0 rows
   delete from public.tables where true;                            -- expect: 0 rows
@@ -88,6 +98,7 @@ begin;
   -- select public.upsert_checklist_config('[]'::jsonb);            -- expect: permission denied for function
   -- select public.get_checkin_guests();                            -- expect: permission denied for function
   -- select * from public.get_wishes_guests();                       -- expect: permission denied for function
+  -- select * from public.get_wedding_floorplans();                  -- expect: permission denied for function (0010; not anon-granted)
   -- select public.upsert_runsheet('[]'::jsonb, false);              -- expect: permission denied for function
   -- The published-runsheet read stays anon-callable BY DESIGN (public page):
   -- select * from public.get_public_runsheet('some-slug');          -- expect: succeeds (0 or 1 rows, no error)
@@ -103,6 +114,7 @@ begin;
 
   select public.is_helper() as expect_false;                       -- expect: f
   select count(*) as guests_visible_to_couple from public.guests;  -- expect: real count (couple keeps select)
+  select count(*) as weddings_visible_to_couple from public.weddings;  -- expect: 1 (couple keeps the direct select)
   update public.guests set notes = notes where true;               -- expect: succeeds
   select count(*) as submissions_visible_to_couple from public.submissions;  -- expect: real count
 
