@@ -202,6 +202,19 @@ This project is configured so that:
   surface `find_guest_by_name` already exposes *without* any PIN, so open mode
   is strictly tighter than the by-name path above.
 
+- **Guest merge is couple-only and audited**
+  ([`0011_guest_dedupe.sql`](supabase/migrations/0011_guest_dedupe.sql)).
+  `merge_guests` and `dismiss_duplicate_pair` are `security definer`, so they
+  bypass RLS and carry their own `is_helper()` gate raising `42501`;
+  `get_duplicate_candidates` gates in its `WHERE` clause and returns zero rows
+  for a helper. A merge **deletes** a guest row, so it first snapshots the whole
+  row plus its event answers and plus-ones into `guest_merges` — an
+  append-only audit table with a couple-only `SELECT` policy and *no*
+  insert/update/delete policy for any role, so the trail cannot be edited or
+  erased from a client. The merge also suppresses the RSVP confirmation webhook
+  for its transaction (`app.suppress_rsvp_email`), so an administrative merge
+  never emails a guest a confirmation they did not trigger.
+
 - **Event audience targeting is cosmetic, not access control**
   ([`0004_smart_rsvp.sql`](supabase/migrations/0004_smart_rsvp.sql)).
   `wedding_events.audience_groups` filters which event cards the public RSVP
