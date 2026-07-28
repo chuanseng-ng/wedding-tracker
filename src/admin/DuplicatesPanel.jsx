@@ -47,6 +47,14 @@ const FIELD_LABELS = {
 
 const label = (field) => FIELD_LABELS[field] || field;
 
+// Every reason childMergePlan can emit — a fallback ternary would mislabel an
+// unnamed plus-one as a name collision.
+const DROP_REASONS = {
+  cap_reached: " — 6 additional guests already",
+  duplicate_name: " — same name already there",
+  blank_name: " — no name given",
+};
+
 export default function DuplicatesPanel({
   candidates = [],
   guests = [],
@@ -112,8 +120,10 @@ export default function DuplicatesPanel({
   const confirmMerge = async () => {
     setBusy(true);
     try {
-      await onMerge(pending.canonicalId, pending.duplicateId);
-      setPending(null);
+      // mergeGuests resolves false on failure rather than throwing, so closing
+      // unconditionally would look like success with only a transient toast.
+      const ok = await onMerge(pending.canonicalId, pending.duplicateId);
+      if (ok !== false) setPending(null);
     } finally {
       setBusy(false);
     }
@@ -242,7 +252,7 @@ export default function DuplicatesPanel({
                   {preview.dropped.map((c) => (
                     <li key={c.id} className="dup-warn">
                       {c.name}
-                      {c.reason === "cap_reached" ? " — 6 additional guests already" : " — same name already there"}
+                      {DROP_REASONS[c.reason] || ""}
                     </li>
                   ))}
                 </Group>

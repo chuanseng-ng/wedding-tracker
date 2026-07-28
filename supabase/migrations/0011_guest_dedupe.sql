@@ -172,6 +172,15 @@ as $$
           or similarity(public.normalize_guest_name(d.name),
                         public.normalize_guest_name(c.name)) >= 0.55
            )
+       -- Two self-registered walk-ins matching each other are BOTH in `dupes`,
+       -- so the pair would be emitted twice (A→B and B→A). Keep one direction:
+       -- the newer row merges into the older, which is the likelier original.
+       -- A pre-invited canonical is always emitted — it can never mirror,
+       -- because only self-registered guests appear in `dupes`.
+       and (
+             not c.self_registered
+          or (d.created_at, d.id) > (c.created_at, c.id)
+           )
        -- Never offer to merge a guest into another guest already dismissed
        -- against it, in either direction.
        and not exists (

@@ -244,7 +244,44 @@ end $$;
 rollback;
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- 4. RSVP-email suppression is transaction-local
+-- 4. Two walk-ins matching each other are offered ONCE, not mirrored
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Both rows are self-registered, so both land in the candidate query's `dupes`
+-- set and the pair would be emitted as A→B and B→A. Only the newer→older
+-- direction should survive; the mirror would otherwise linger on screen after
+-- one direction was dismissed, since dismissals are stored canonically.
+begin;
+  update public.app_config set value = 'couple@wedding.local' where key = 'couple_email';
+
+do $$
+declare
+  v_old uuid;
+  v_new uuid;
+  v_n   int;
+begin
+  insert into public.guests (name, self_registered, created_at)
+    values ('Walkin Tan', true, now() - interval '1 hour') returning id into v_old;
+  insert into public.guests (name, self_registered, created_at)
+    values ('Walkin  TAN', true, now()) returning id into v_new;
+
+  set local role authenticated;
+  set local request.jwt.claims = '{"role":"authenticated","email":"couple@wedding.local"}';
+
+  select count(*) into v_n from public.get_duplicate_candidates()
+    where duplicate_id in (v_old, v_new) and canonical_id in (v_old, v_new);
+  assert v_n = 1, 'walk-in pair must be offered exactly once, got ' || v_n;
+
+  select count(*) into v_n from public.get_duplicate_candidates()
+    where duplicate_id = v_new and canonical_id = v_old;
+  assert v_n = 1, 'the newer walk-in should be the one offered for merging';
+
+  reset role;
+  raise notice 'BLOCK 4 PASSED — walk-in pairs are not mirrored';
+end $$;
+rollback;
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 5. RSVP-email suppression is transaction-local
 -- ─────────────────────────────────────────────────────────────────────────────
 -- merge_guests can move the canonical from 'pending' to 'confirmed', which would
 -- otherwise fire notify_rsvp_status_change and email the guest a confirmation
@@ -270,5 +307,5 @@ begin
   assert coalesce(current_setting('app.suppress_rsvp_email', true), '') <> 'on',
     'SECURITY REGRESSION: suppression flag leaked past its transaction — '
     'genuine RSVP confirmation emails would stop sending';
-  raise notice 'BLOCK 4 PASSED — email suppression is transaction-local';
+  raise notice 'BLOCK 5 PASSED — email suppression is transaction-local';
 end $$;

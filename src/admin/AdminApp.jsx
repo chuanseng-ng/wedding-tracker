@@ -1741,6 +1741,12 @@ export default function WeddingTracker() {
         p_canonical_id: canonicalId,
         p_duplicate_id: duplicateId,
       });
+      // Inside the try so pendingIds still covers the refetch — releasing the
+      // guard first would let the 5 s poll land in between and paint a
+      // half-merged list. Both loaders swallow their own errors, so they cannot
+      // trip the catch below and mislabel a successful merge as a failure.
+      await loadGuests();
+      await loadEventRsvps();
     } catch {
       syncFail("Could not merge guests — check connection");
       return false;
@@ -1748,8 +1754,6 @@ export default function WeddingTracker() {
       pendingIds.current.delete(canonicalId);
       pendingIds.current.delete(duplicateId);
     }
-    await loadGuests();
-    await loadEventRsvps();
     await loadDuplicates();
     showToast("Guests merged");
     return true;
@@ -1758,9 +1762,16 @@ export default function WeddingTracker() {
   // "Not a duplicate" — remembers the pair so it stops being offered.
   const dismissDuplicate = async (guestA, guestB) => {
     if (isDemoMode) return;
+    // Direction-agnostic: two self-registered walk-ins that match each other are
+    // offered as one pair, but the server stores the dismissal canonically —
+    // filtering only the clicked direction could strand its mirror on screen.
     setDuplicates((d) =>
       d.filter(
-        (c) => !(c.duplicate_id === guestA && c.canonical_id === guestB)
+        (c) =>
+          !(
+            (c.duplicate_id === guestA && c.canonical_id === guestB) ||
+            (c.duplicate_id === guestB && c.canonical_id === guestA)
+          )
       )
     );
     try {
