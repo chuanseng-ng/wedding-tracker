@@ -18,8 +18,39 @@ export const isOpenMode = ({ wedding, isDemoMode, activeToken }) =>
 export const registerResultErrorKey = (error) => {
   if (error === "invalid_pin") return "rsvp.err.pinInvalid";
   if (error === "too_many_attempts") return "rsvp.err.tooManyAttempts";
+  // The confirmed guest no longer matches the typed name server-side — merged
+  // away, renamed, or a forged id. Refused rather than silently inserting the
+  // duplicate this feature exists to prevent, so the guest needs telling.
+  if (error === "confirm_failed") return "rsvp.err.confirmFailed";
   return "rsvp.err.generic";
 };
+
+// Most near-match candidates register_open_rsvp will ever return. Mirrors the
+// server's own limit; also a cap on how much of the guest list one PIN-holding
+// caller can see per submission.
+export const MAX_CANDIDATES = 3;
+
+// Which of the three outcomes register_open_rsvp returned:
+//   'token'         — registered (or matched an existing guest); carry on.
+//   'needs_confirm' — the typed name looks like someone already invited; ask
+//                     before creating a duplicate. Carries NO token, but is not
+//                     an error — the page must test for this before !res.token.
+//   'error'         — a PIN failure, or anything unusable.
+//
+// A confirmation prompt with nothing to offer is treated as an error: showing
+// "did you mean…?" above an empty list would strand the guest.
+export const registerResultKind = (res) => {
+  if (res?.token) return "token";
+  if (res?.needs_confirm && registerCandidates(res).length > 0) return "needs_confirm";
+  return "error";
+};
+
+// The near-matches to offer, defensively filtered — a candidate without both an
+// id and a name cannot be rendered or confirmed.
+export const registerCandidates = (res) =>
+  (Array.isArray(res?.candidates) ? res.candidates : [])
+    .filter((c) => c?.id && c?.name)
+    .slice(0, MAX_CANDIDATES);
 
 // Maps a submit/register RPC error message to an i18n key — the same matching
 // the RSVP submit catch used inline before open mode added the pin case.

@@ -8,7 +8,15 @@ import { localizeWedding, TRANSLATABLE_FIELDS } from "../i18n/content.js";
 import { localizeEvents } from "../lib/eventLocalize.js";
 import { buildEventResponses, declineAllResponses, hydrateEventState, primaryAnsweredAllEvents } from "../lib/rsvpFormPayload.js";
 import { visibleEventsFor } from "../lib/eventVisibility.js";
-import { MAX_PIN, cleanPin, isOpenMode, openRsvpErrorKey, registerResultErrorKey } from "../lib/openRsvp.js";
+import {
+  MAX_PIN,
+  cleanPin,
+  isOpenMode,
+  openRsvpErrorKey,
+  registerCandidates,
+  registerResultErrorKey,
+  registerResultKind,
+} from "../lib/openRsvp.js";
 import { sanitizeThemeTokens, isCompleteThemeTokens, themeTokenStyle } from "../lib/themeTokens.js";
 import { buildIcsDataUrl } from "./buildIcs.js";
 import LanguageSwitcher from "../i18n/LanguageSwitcher.jsx";
@@ -120,6 +128,39 @@ const styles = theme + `
     padding: 10px 13px; background: var(--red-soft);
     border-radius: 8px; border-left: 3px solid var(--red);
   }
+
+  /* Near-duplicate prompt (open mode). Gold, not red — the guest has done
+     nothing wrong; this is a question, not a failure. Matches the amber used
+     by the plus-one disclaimer further down the form. */
+  /* Prefixed rsvp-dupe-, NOT rsvp-confirm- — the latter is already taken by the
+     post-submission thank-you screen further down this stylesheet, whose later
+     .rsvp-confirm / .rsvp-confirm-title rules would override these. */
+  .rsvp-dupe {
+    margin-bottom: 16px; padding: 14px; border-radius: 12px;
+    background: rgba(212,160,80,0.12); border: 1px solid rgba(201,168,76,0.35);
+  }
+  .rsvp-dupe-title { font-size: 14px; font-weight: 500; color: var(--gold-dark); margin-bottom: 4px; }
+  .rsvp-dupe-body { font-size: 13px; line-height: 1.5; color: var(--brown); margin-bottom: 10px; }
+  .rsvp-dupe-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+  .rsvp-dupe-option {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    width: 100%; padding: 11px 13px; border-radius: 8px; cursor: pointer;
+    background: white; border: 1.5px solid rgba(201,168,76,0.4);
+    font-family: 'DM Sans', sans-serif; font-size: 14px; color: var(--charcoal);
+    text-align: left; transition: border-color 0.15s, background 0.15s;
+  }
+  .rsvp-dupe-option:hover:not(:disabled) { border-color: var(--gold); background: var(--warm-white); }
+  .rsvp-dupe-option:disabled { opacity: 0.5; cursor: not-allowed; }
+  .rsvp-dupe-option-name { font-weight: 500; }
+  .rsvp-dupe-option-cta { font-size: 12px; color: var(--gold-dark); white-space: nowrap; }
+  .rsvp-dupe-new {
+    width: 100%; padding: 9px; border-radius: 8px; cursor: pointer;
+    background: none; border: 1px solid rgba(92,74,42,0.25);
+    font-family: 'DM Sans', sans-serif; font-size: 13px; color: var(--brown);
+    transition: border-color 0.15s;
+  }
+  .rsvp-dupe-new:hover:not(:disabled) { border-color: var(--brown); }
+  .rsvp-dupe-new:disabled { opacity: 0.5; cursor: not-allowed; }
 
   .rsvp-submit {
     width: 100%; padding: 14px; border-radius: 50px; border: none;
@@ -370,6 +411,11 @@ export default function RsvpPage() {
   const [closerTo, setCloserTo]                    = useState("");
   const [message, setMessage]         = useState("");
   const [error, setError]             = useState("");
+  // Open-mode near-duplicate confirmation: non-empty means the server asked
+  // "did you mean…?". The guest's answer is passed straight into submit() as an
+  // argument rather than held in state — a state write would not be visible to
+  // the same call, and there is nothing to remember once answered.
+  const [candidates, setCandidates]   = useState([]);
   const [submitting, setSubmitting]   = useState(false);
   const [done, setDone]               = useState(false);
   const [tokenLoading, setTokenLoading] = useState(!!urlToken);
@@ -523,8 +569,11 @@ export default function RsvpPage() {
   // and the query is long enough — derived, not stored in state.
   const showSuggestions = !activeToken && !isDemoMode && !openMode && nameQuery.trim().length >= 2;
 
-  const submit = async (e) => {
-    e.preventDefault();
+  // `answer` carries the guest's reply to a near-duplicate prompt:
+  // { confirmGuestId } for "that's me", { forceNew: true } for "continue as
+  // typed". Absent on a first submission.
+  const submit = async (e, answer = {}) => {
+    e?.preventDefault();
     if (!isDemoMode && !activeToken && !openMode) {
       setError(t("rsvp.err.nameSelect"));
       return;
@@ -561,15 +610,27 @@ export default function RsvpPage() {
       let token = activeToken;
       if (openMode) {
         const res = await sb.rpc("register_open_rsvp", {
-          p_name: cleanName(name),
-          p_pin:  cleanPin(pin),
+          p_name:             cleanName(name),
+          p_pin:              cleanPin(pin),
+          p_confirm_guest_id: answer.confirmGuestId || null,
+          p_force_new:        !!answer.forceNew,
         });
-        // PIN failures come back as {error} (not thrown) so the server can
-        // record the attempt for its brute-force rate limit.
-        if (!res?.token) {
-          setError(t(registerResultErrorKey(res?.error)));
+        const kind = registerResultKind(res);
+        // A near-match asks before creating a duplicate. It carries no token but
+        // is NOT an error, so it must be handled before the token check below —
+        // and rendered as a notice, not through setError.
+        if (kind === "needs_confirm") {
+          setCandidates(registerCandidates(res));
           return;
         }
+        // PIN failures come back as {error} (not thrown) so the server can
+        // record the attempt for its brute-force rate limit.
+        if (kind !== "token") {
+          setError(t(registerResultErrorKey(res?.error)));
+          setCandidates([]);
+          return;
+        }
+        setCandidates([]);
         token = res.token;
       }
       if (useSmartForm) {
@@ -674,7 +735,12 @@ export default function RsvpPage() {
                     className="rsvp-input"
                     placeholder={t("rsvp.name.placeholder")}
                     value={name}
-                    onChange={(e) => { setName(e.target.value); setError(""); }}
+                    onChange={(e) => {
+                      setName(e.target.value);
+                      setError("");
+                      // Editing the name invalidates any "did you mean…?" prompt.
+                      setCandidates([]);
+                    }}
                     autoFocus
                   />
                 ) : activeToken ? (
@@ -1123,6 +1189,38 @@ export default function RsvpPage() {
               </div>
 
               {error && <div className="rsvp-error">{error}</div>}
+
+              {/* Open-mode near-duplicate prompt. A notice, never an error: the
+                  guest has done nothing wrong and can always continue as typed.
+                  Only reachable once the PIN has verified server-side. */}
+              {candidates.length > 0 && (
+                <div className="rsvp-dupe" role="group" aria-label={t("rsvp.dupe.title")}>
+                  <div className="rsvp-dupe-title">{t("rsvp.dupe.title")}</div>
+                  <div className="rsvp-dupe-body">{t("rsvp.dupe.body")}</div>
+                  <div className="rsvp-dupe-list">
+                    {candidates.map((c) => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        className="rsvp-dupe-option"
+                        disabled={submitting}
+                        onClick={() => submit(null, { confirmGuestId: c.id })}
+                      >
+                        <span className="rsvp-dupe-option-name">{c.name}</span>
+                        <span className="rsvp-dupe-option-cta">{t("rsvp.dupe.yes")}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    className="rsvp-dupe-new"
+                    disabled={submitting}
+                    onClick={() => submit(null, { forceNew: true })}
+                  >
+                    {t("rsvp.dupe.no", { name: cleanName(name) })}
+                  </button>
+                </div>
+              )}
 
               <div className="rsvp-submit-wrap">
                 <button type="submit" className="rsvp-submit" disabled={submitting}>

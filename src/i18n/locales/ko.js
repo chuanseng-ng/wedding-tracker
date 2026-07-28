@@ -101,6 +101,12 @@ export default {
   "rsvp.pin.label": "RSVP PIN",
   "rsvp.pin.placeholder": "청첩장에 적힌 PIN",
 
+  // Near-duplicate confirmation
+  "rsvp.dupe.title": "본인이신가요?",
+  "rsvp.dupe.body": "입력하신 이름이 이미 하객 명단에 있는 분과 매우 비슷합니다. 중복 등록되지 않도록 아래에서 본인을 선택해 주세요.",
+  "rsvp.dupe.yes": "네, 접니다",
+  "rsvp.dupe.no": "아니요 — '{name}'(으)로 계속하기",
+
   "rsvp.email.label": "이메일",
   "rsvp.email.placeholder": "확인 메일을 보내드립니다",
 
@@ -178,6 +184,7 @@ export default {
   "rsvp.err.pinRequired": "청첩장에 적힌 RSVP PIN을 입력해 주세요.",
   "rsvp.err.pinInvalid": "PIN이 일치하지 않습니다 — 청첩장을 확인해 주세요.",
   "rsvp.err.tooManyAttempts": "PIN 시도 횟수가 너무 많습니다 — 잠시 후 다시 시도해 주세요.",
+  "rsvp.err.confirmFailed": "해당 하객을 확인하지 못했습니다. 다시 시도하시거나 입력하신 이름으로 계속해 주세요.",
   "rsvp.err.notSetup": "참석 회신이 아직 설정되지 않았습니다 — 데이터베이스 마이그레이션이 실행되지 않았습니다. 신랑 신부에게 문의하세요.",
   "rsvp.err.linkExpired": "참석 회신 링크가 만료되었습니다. 새 링크는 신랑 신부에게 문의하세요.",
   "rsvp.err.generic": "오류가 발생했습니다 — 다시 시도하거나 신랑 신부에게 문의하세요.",

@@ -101,6 +101,12 @@ export default {
   "rsvp.pin.label": "回覆密碼 (PIN)",
   "rsvp.pin.placeholder": "邀請函上的密碼",
 
+  // Near-duplicate confirmation
+  "rsvp.dupe.title": "請問是您本人嗎？",
+  "rsvp.dupe.body": "這個名字與賓客名單上的某位很相似。請在下方選擇您本人，以免重複登記。",
+  "rsvp.dupe.yes": "是，就是我",
+  "rsvp.dupe.no": "不是 — 以「{name}」繼續",
+
   "rsvp.email.label": "您的電子郵件",
   "rsvp.email.placeholder": "以便寄送確認信給您",
 
@@ -177,6 +183,7 @@ export default {
   "rsvp.err.pinRequired": "請輸入邀請函上的回覆密碼。",
   "rsvp.err.pinInvalid": "密碼不正確 — 請核對您的邀請函。",
   "rsvp.err.tooManyAttempts": "密碼嘗試次數過多 — 請稍後再試。",
+  "rsvp.err.confirmFailed": "無法確認該位賓客，請再試一次，或以您輸入的名字繼續。",
   "rsvp.err.notSetup": "回覆功能尚未設定 — 資料庫尚未完成遷移，請聯絡新人。",
   "rsvp.err.linkExpired": "您的回覆連結已失效，請聯絡新人取得新連結。",
   "rsvp.err.generic": "發生錯誤，請再試一次或聯絡新人。",

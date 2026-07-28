@@ -102,6 +102,13 @@ export default {
   "rsvp.pin.label": "RSVP PIN",
   "rsvp.pin.placeholder": "The PIN from your invitation",
 
+  // Near-duplicate confirmation — shown only after the PIN verifies, when the
+  // typed name closely matches someone already on the guest list.
+  "rsvp.dupe.title": "Is this you?",
+  "rsvp.dupe.body": "That name looks a lot like someone already on the guest list. Pick yourself below so we don't add you twice.",
+  "rsvp.dupe.yes": "Yes, that's me",
+  "rsvp.dupe.no": "No — continue as “{name}”",
+
   "rsvp.email.label": "Your Email",
   "rsvp.email.placeholder": "So we can send your confirmation",
 
@@ -183,6 +190,7 @@ export default {
   "rsvp.err.pinRequired": "Please enter the RSVP PIN from your invitation.",
   "rsvp.err.pinInvalid": "That PIN doesn't match — please check your invitation.",
   "rsvp.err.tooManyAttempts": "Too many PIN attempts — please try again in a little while.",
+  "rsvp.err.confirmFailed": "That guest could not be confirmed — please try again, or continue with the name you typed.",
   "rsvp.err.notSetup": "RSVP is not set up yet — the database migration hasn't been run. Contact the couple.",
   "rsvp.err.linkExpired": "Your RSVP link has expired. Please contact the couple for a new link.",
   "rsvp.err.generic": "Something went wrong — please try again or contact the couple.",

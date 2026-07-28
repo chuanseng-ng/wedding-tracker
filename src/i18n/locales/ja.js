@@ -101,6 +101,12 @@ export default {
   "rsvp.pin.label": "RSVP 暗証番号（PIN）",
   "rsvp.pin.placeholder": "招待状に記載のPIN",
 
+  // Near-duplicate confirmation
+  "rsvp.dupe.title": "こちらの方でしょうか？",
+  "rsvp.dupe.body": "ご入力のお名前が、ゲストリストの方とよく似ています。重複登録を防ぐため、下記からご本人をお選びください。",
+  "rsvp.dupe.yes": "はい、本人です",
+  "rsvp.dupe.no": "いいえ —「{name}」のまま進む",
+
   "rsvp.email.label": "メールアドレス",
   "rsvp.email.placeholder": "確認メールをお送りします",
 
@@ -178,6 +184,7 @@ export default {
   "rsvp.err.pinRequired": "招待状に記載のPINを入力してください。",
   "rsvp.err.pinInvalid": "PINが一致しません — 招待状をご確認ください。",
   "rsvp.err.tooManyAttempts": "PINの入力回数が多すぎます — しばらくしてからもう一度お試しください。",
+  "rsvp.err.confirmFailed": "そのゲストを確認できませんでした。もう一度お試しいただくか、ご入力のお名前のまま進んでください。",
   "rsvp.err.notSetup": "出欠登録はまだ設定されていません — データベースの移行が実行されていません。新郎新婦にご連絡ください。",
   "rsvp.err.linkExpired": "出欠登録リンクの有効期限が切れました。新しいリンクについては新郎新婦にご連絡ください。",
   "rsvp.err.generic": "エラーが発生しました — もう一度お試しいただくか、新郎新婦にご連絡ください。",

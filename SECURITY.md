@@ -202,6 +202,22 @@ This project is configured so that:
   surface `find_guest_by_name` already exposes *without* any PIN, so open mode
   is strictly tighter than the by-name path above.
 
+- **Open RSVP asks about near-duplicate names, after the PIN**
+  ([`0012_open_rsvp_confirm.sql`](supabase/migrations/0012_open_rsvp_confirm.sql)).
+  When a typed name closely matches an existing guest, `register_open_rsvp`
+  returns up to 3 candidates instead of silently creating a duplicate, and
+  confirming one returns that guest's token. This widens what open mode
+  reveals — previously you had to guess a name *exactly* — so four controls
+  bound it, all load-bearing: **(1)** matching runs only *after* the PIN
+  verifies, and a wrong PIN still burns a rate-limit attempt; **(2)** the 0.55
+  similarity threshold means short probes match nothing (`similarity('tan',
+  'tan wei ming')` ≈ 0.31), so a surname cannot be used to fish; **(3)** at
+  most 3 candidates per submission, projecting only `id` and `name` — never
+  contact details, RSVP status or seating; **(4)** the existing sliding-window
+  lockout (20 wrong PINs / 15 min) is unchanged and gates every call. A
+  confirmed id is **re-validated server-side** against the typed name, so a
+  client cannot claim an arbitrary guest id it was never offered.
+
 - **Guest merge is couple-only and audited**
   ([`0011_guest_dedupe.sql`](supabase/migrations/0011_guest_dedupe.sql)).
   `merge_guests` and `dismiss_duplicate_pair` are `security definer`, so they

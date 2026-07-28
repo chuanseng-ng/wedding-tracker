@@ -1,5 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { MAX_PIN, cleanPin, isOpenMode, openRsvpErrorKey, registerResultErrorKey } from "./openRsvp.js";
+import {
+  MAX_PIN,
+  cleanPin,
+  isOpenMode,
+  openRsvpErrorKey,
+  registerResultErrorKey,
+  registerResultKind,
+  registerCandidates,
+} from "./openRsvp.js";
 
 describe("cleanPin", () => {
   it("trims surrounding whitespace", () => {
@@ -74,10 +82,71 @@ describe("registerResultErrorKey", () => {
   it("maps the structured RPC error codes", () => {
     expect(registerResultErrorKey("invalid_pin")).toBe("rsvp.err.pinInvalid");
     expect(registerResultErrorKey("too_many_attempts")).toBe("rsvp.err.tooManyAttempts");
+    expect(registerResultErrorKey("confirm_failed")).toBe("rsvp.err.confirmFailed");
   });
 
   it("falls back to the generic key for unknown codes", () => {
     expect(registerResultErrorKey("mystery")).toBe("rsvp.err.generic");
     expect(registerResultErrorKey(undefined)).toBe("rsvp.err.generic");
+  });
+});
+
+describe("registerResultKind", () => {
+  // Three outcomes, and the order matters: needs_confirm carries no token but
+  // is NOT an error, so the page must branch on it before the token check.
+  it("recognises a successful registration", () => {
+    expect(registerResultKind({ token: "abc-123" })).toBe("token");
+  });
+
+  it("recognises the near-duplicate confirmation prompt", () => {
+    expect(
+      registerResultKind({ needs_confirm: true, candidates: [{ id: "g1", name: "Wei Ming Tan" }] })
+    ).toBe("needs_confirm");
+  });
+
+  it("treats a confirmation prompt with no usable candidates as an error", () => {
+    // Defensive: prompting "did you mean…?" with an empty list would strand the
+    // guest with no way forward.
+    expect(registerResultKind({ needs_confirm: true, candidates: [] })).toBe("error");
+    expect(registerResultKind({ needs_confirm: true })).toBe("error");
+  });
+
+  it("treats a token alongside needs_confirm as a token", () => {
+    expect(registerResultKind({ needs_confirm: true, token: "abc-123" })).toBe("token");
+  });
+
+  it("treats PIN failures, empty and malformed results as errors", () => {
+    expect(registerResultKind({ error: "invalid_pin" })).toBe("error");
+    expect(registerResultKind({})).toBe("error");
+    expect(registerResultKind(null)).toBe("error");
+    expect(registerResultKind(undefined)).toBe("error");
+    expect(registerResultKind("nonsense")).toBe("error");
+  });
+});
+
+describe("registerCandidates", () => {
+  it("returns well-formed candidates unchanged", () => {
+    expect(registerCandidates({ candidates: [{ id: "g1", name: "Wei Ming Tan" }] })).toEqual([
+      { id: "g1", name: "Wei Ming Tan" },
+    ]);
+  });
+
+  it("drops entries missing an id or a name", () => {
+    expect(
+      registerCandidates({
+        candidates: [{ id: "g1", name: "Ok" }, { id: "g2" }, { name: "No id" }, null],
+      })
+    ).toEqual([{ id: "g1", name: "Ok" }]);
+  });
+
+  it("caps the list, matching the server's limit", () => {
+    const many = Array.from({ length: 9 }, (_, i) => ({ id: `g${i}`, name: `Guest ${i}` }));
+    expect(registerCandidates({ candidates: many })).toHaveLength(3);
+  });
+
+  it("returns an empty array for anything unusable", () => {
+    expect(registerCandidates({})).toEqual([]);
+    expect(registerCandidates(null)).toEqual([]);
+    expect(registerCandidates({ candidates: "nope" })).toEqual([]);
   });
 });

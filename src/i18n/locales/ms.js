@@ -101,6 +101,12 @@ export default {
   "rsvp.pin.label": "PIN RSVP",
   "rsvp.pin.placeholder": "PIN daripada kad jemputan anda",
 
+  // Near-duplicate confirmation
+  "rsvp.dupe.title": "Adakah ini anda?",
+  "rsvp.dupe.body": "Nama itu sangat mirip dengan seseorang yang sudah ada dalam senarai tetamu. Sila pilih diri anda di bawah supaya anda tidak didaftarkan dua kali.",
+  "rsvp.dupe.yes": "Ya, itu saya",
+  "rsvp.dupe.no": "Bukan — teruskan sebagai “{name}”",
+
   "rsvp.email.label": "E-mel Anda",
   "rsvp.email.placeholder": "Supaya kami boleh menghantar pengesahan anda",
 
@@ -178,6 +184,7 @@ export default {
   "rsvp.err.pinRequired": "Sila masukkan PIN RSVP daripada kad jemputan anda.",
   "rsvp.err.pinInvalid": "PIN tidak sepadan — sila semak kad jemputan anda.",
   "rsvp.err.tooManyAttempts": "Terlalu banyak percubaan PIN — sila cuba lagi sebentar nanti.",
+  "rsvp.err.confirmFailed": "Tetamu itu tidak dapat disahkan — sila cuba lagi, atau teruskan dengan nama yang anda taip.",
   "rsvp.err.notSetup": "RSVP belum disediakan — migrasi pangkalan data belum dijalankan. Hubungi pasangan pengantin.",
   "rsvp.err.linkExpired": "Pautan RSVP anda telah tamat tempoh. Sila hubungi pasangan pengantin untuk pautan baharu.",
   "rsvp.err.generic": "Sesuatu tidak kena — sila cuba lagi atau hubungi pasangan pengantin.",
