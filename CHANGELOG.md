@@ -5,6 +5,23 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [2026-07-29] — White blank page: react / react-dom version mismatch
+
+### Added
+
+- **A `Makefile` task runner** (`make help`) wrapping the commands that were previously only prose in `README.md` / `CLAUDE.md`: setup (`setup`, `install`, `env`), dev servers (`dev`, `smoke`, `api`, `preview`), quality gates (`ci`, `lint`, `test`, `test-watch`, `test-file`, `test-name`, `build`, `audit`, `versions`) and the local Supabase stack (`db-start`, `db-stop`, `db-reset`, `db-push`, `db-migration`). The npm scripts stay the source of truth — the Makefile only shortens and groups them. `make ci` is lint → test → build → audit in CI's exact order, and `make env` refuses to overwrite an existing `.env`. Needs a POSIX shell, so run it from Git Bash on Windows.
+
+### Fixed
+
+- **Every route rendered a white blank page** — `Uncaught Error: Minified React error #527` (`args[]=19.2.8&args[]=19.2.7`). Dependabot bumped **`react` 19.2.7 → 19.2.8 and left `react-dom` behind at 19.2.7**, and npm accepted the split pair because `react-dom@19.2.7` declares the *loose* peer range `"react": "^19.2.7"`, which 19.2.8 satisfies. But react-dom hard-codes the **exact** react version it was compiled against and throws on mismatch at module-evaluation time — `if ("19.2.7" !== React.version) throw Error(formatProdErrorMessage(527, …))` — which runs *before* `createRoot(...).render(...)`, so `#root` was never populated. The guard is in the production build too, as the minified error code rather than the "Incompatible React versions" message text. `react-dom` is now `^19.2.8`, matching `react`.
+- **Nothing in CI could have caught it.** The check is purely at runtime: `npm ci`, `npm run lint`, the Vitest suite (pure `src/lib` modules, no render), `vite build` and `scripts/security-audit.mjs` all pass with a mismatched pair, and the broken bundle deploys clean. [`src/lib/reactVersions.test.js`](src/lib/reactVersions.test.js) now asserts the two packages resolve to the same version, so `npm test` fails instead of production.
+
+### Changed
+
+- **`.github/dependabot.yml` groups the React packages** (`react`, `react-dom`, `@types/react`, `@types/react-dom`) into one PR, so they can no longer be bumped independently. The unit test above remains the backstop if the grouping is ever dropped.
+
+---
+
 ## [2026-07-29] — Migrations consolidated: 12 files → 10 domain files
 
 ### Fixed
