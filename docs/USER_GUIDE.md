@@ -40,6 +40,7 @@ Open the **SQL Editor** in your Supabase dashboard and run the migrations **in o
 | [`0009_photowall.sql`](../supabase/migrations/0009_photowall.sql) | **Guest photowall** (#138): `photowall_photos` metadata table (files live in Cloudflare R2 / Vercel Blob, not Supabase), `photowall_pin_attempts` rate-limit log, anon `get_photowall_photos` read RPC, service-role-only upload RPCs, couple-only PIN readback (the `weddings` flag/pin columns live in `0003`) |
 | [`0010_weddings_helper_read_hardening.sql`](../supabase/migrations/0010_weddings_helper_read_hardening.sql) | Closes the helper read gap on the singleton `weddings` row (couple-only `SELECT`); helper-safe `get_wedding_floorplans` projection |
 | [`0011_guest_dedupe.sql`](../supabase/migrations/0011_guest_dedupe.sql) | **Duplicate guest cleanup**: shared `normalize_guest_name` matching rule + trigram index, `guest_merges` audit table, `duplicate_dismissals`, couple-only `get_duplicate_candidates` / `dismiss_duplicate_pair` / `merge_guests`; adds an RSVP-email suppression guard to the `0007` webhook |
+| [`0012_couple_name_order.sql`](../supabase/migrations/0012_couple_name_order.sql) | **Couple name order**: `weddings.name_order` (`bride_first` default / `groom_first`, CHECK-constrained); appends `name_order` to `get_wedding_config` / `get_public_wedding` / `get_public_runsheet` and adds `p_name_order` to `upsert_wedding_config` |
 
 All migrations are idempotent (`CREATE OR REPLACE`, `IF NOT EXISTS`) — safe to re-run,
 including against a database that already ran the pre-consolidation files.

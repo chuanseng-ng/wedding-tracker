@@ -75,11 +75,20 @@ export default async function handler(req, res) {
   }
 
   const supabase = supabaseAdmin();
-  const { data: wedding } = await supabase
+  // maybeSingle (not single): zero rows is a legitimate "not set up yet" state,
+  // not an error. That keeps `weddingError` meaning a genuine query failure.
+  const { data: wedding, error: weddingError } = await supabase
     .from("weddings")
     .select("bride_name, groom_name, name_order, wedding_date, venue_name, venue_address, dress_code, tea_ceremony_time, ceremony_time, dinner_time, hero_image_url, getting_there, slug, is_published, checklist")
     .limit(1)
-    .single();
+    .maybeSingle();
+  // A query failure (e.g. migrations not applied, so name_order doesn't exist)
+  // must NOT be reported as "not configured yet" — a 200 there would silently
+  // stop every reminder and hide the real cause from the cron log.
+  if (weddingError) {
+    console.error("[send-reminders] wedding lookup failed:", weddingError.message || weddingError);
+    return res.status(500).json({ error: "could not load wedding config" });
+  }
   if (!wedding) return res.status(200).json({ sent: 0, checklistSent: 0, reason: "wedding not configured yet" });
 
   // Allow days override for local testing (ignored in production).
