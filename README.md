@@ -121,9 +121,10 @@ There is also a `Makefile` wrapping these plus the Supabase and demo-mode comman
 run `make help` for the full list. It needs a POSIX shell, so use Git Bash on Windows.
 
 ```bash
-make setup        # npm ci + create .env from .env.example (never overwrites an existing .env)
-make dev          # Vite dev server            (PORT=5173 to override)
-make ci           # lint → test → build → audit, in CI's order — run before committing
-make smoke        # dev server forced into demo mode, no Supabase needed
-make db-reset     # re-run every migration + seed.sql against the local stack
+make setup           # npm ci + create .env from .env.example (never overwrites an existing .env)
+make dev             # Vite dev server on the default port 5173
+make dev PORT=3000   # ...or override it
+make ci              # lint → test → build → audit, in CI's order — run before committing
+make smoke           # dev server forced into demo mode, no Supabase needed
+make db-reset        # re-run every migration + seed.sql against the local stack
 ```

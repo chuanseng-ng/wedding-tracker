@@ -70,7 +70,13 @@ preview: build ## Build, then serve dist/ locally
 # ---------------------------------------------------------------------------
 
 .PHONY: ci
-ci: lint test build audit ## Everything CI runs, in CI's order - run before committing
+ci: ## Everything CI runs, in CI's order - run before committing
+	@# Recipe lines, not prerequisites: `make -j ci` would start all four at once
+	@# and report gates out of order, which defeats the point of this target.
+	$(MAKE) lint
+	$(MAKE) test
+	$(MAKE) build
+	$(MAKE) audit
 	@echo ""
 	@echo "All CI gates passed."
 
@@ -149,6 +155,9 @@ clean-all: clean ## Remove build output and node_modules
 help: ## List available targets
 	@echo "Wedding Tracker - make targets"
 	@echo ""
-	@awk 'BEGIN { FS = ":.*?## " } /^[a-zA-Z0-9_-]+:.*?## / { printf "  %-16s %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
+	@# Greedy .*## rather than the usual non-greedy .*?## : the latter is a gawk
+	@# extension, and `awk` is mawk on Debian/Ubuntu. No target line here carries
+	@# a second "## ", so the two forms produce identical output.
+	@awk 'BEGIN { FS = ":.*## " } /^[a-zA-Z0-9_-]+:.*## / { printf "  %-16s %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
 	@echo ""
 	@echo "Variables: PORT=$(PORT)  DEMO_PORT=$(DEMO_PORT)  FILE=  NAME="
