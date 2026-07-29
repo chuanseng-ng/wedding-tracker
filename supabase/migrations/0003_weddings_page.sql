@@ -91,6 +91,10 @@ create table if not exists public.weddings (
   -- Deliberately NOT exposed via get_wedding_config (anon-callable — would leak
   -- the floorplans to the public RSVP page); the admin app selects it directly.
   floorplans        jsonb       not null default '[]'::jsonb,
+  -- Which of bride_name / groom_name reads FIRST wherever the pair is displayed.
+  -- Default 'bride_first' is the historical hardcoded rendering, so existing
+  -- deployments look unchanged. Mirrored in JS by src/lib/coupleName.js.
+  name_order        text        not null default 'bride_first',
   updated_at        timestamptz not null default now()
 );
 
@@ -128,6 +132,11 @@ alter table public.weddings
     check (char_length(photowall_pin) <= 20);
 alter table public.weddings
   add column if not exists floorplans jsonb not null default '[]'::jsonb;
+alter table public.weddings
+  add column if not exists name_order text not null default 'bride_first';
+
+comment on column public.weddings.name_order is
+  'Which of bride_name / groom_name reads FIRST wherever the pair is displayed. ''bride_first'' (default, the pre-name-order hardcoded behaviour) or ''groom_first''. Mirrored in JS by src/lib/coupleName.js — do not join the two names by hand.';
 
 -- Server-side size/whitelist guards: upsert_wedding_page used to be granted to
 -- anon, so a caller could bypass the client-side normalizers. Bound the stored
@@ -194,8 +203,19 @@ begin
   end if;
 end $$;
 
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'weddings_name_order_check'
+  ) then
+    alter table public.weddings
+      add constraint weddings_name_order_check
+      check (name_order in ('bride_first', 'groom_first'));
+  end if;
+end $$;
+
 -- ── 2. RLS ────────────────────────────────────────────────────────────────────
--- SELECT → authenticated only. The public pages never read this table directly
+-- SELECT → the COUPLE only. The public pages never read this table directly
 -- (RsvpPage/WeddingPage go through the anon-granted security-definer RPCs
 -- get_wedding_config / get_public_wedding, which bypass RLS), so there is no
 -- anon read — that would leak the budget/checklist columns.
@@ -206,9 +226,20 @@ alter table public.weddings enable row level security;
 
 drop policy if exists "public" on public.weddings;
 
+-- Couple-only SELECT. This was `using (true)` originally, which leaked
+-- couple-only columns to the shared helper account: RLS filters ROWS, not
+-- COLUMNS, so any signed-in account could `select *` on the singleton weddings
+-- row and read overall_budget_cap, budget_categories, checklist, rsvp_pin and
+-- photowall_pin — the very fields the couple-only reader RPCs
+-- (get_budget_config, get_checklist_config, get_open_rsvp_admin_config,
+-- get_photowall_admin_config) exist to hide. A helper who read rsvp_pin /
+-- photowall_pin could then drive the anon open-RSVP / photowall flows.
+-- The one thing the helper legitimately needs off this row — the floorplan
+-- snapshots (#162) — comes through get_wedding_floorplans (0005), a
+-- security-definer projection exposing ONLY that column.
 drop policy if exists "weddings_select" on public.weddings;
 create policy "weddings_select" on public.weddings
-  for select to authenticated using (true);
+  for select to authenticated using (not (select public.is_helper()));
 
 drop policy if exists "weddings_write" on public.weddings;
 create policy "weddings_write" on public.weddings
@@ -391,7 +422,8 @@ returns table (
   theme_tokens      jsonb,
   section_photos    jsonb,
   enable_smart_rsvp boolean,
-  enable_photowall  boolean
+  enable_photowall  boolean,
+  name_order        text
 )
 language sql
 security definer
@@ -417,7 +449,8 @@ as $$
     coalesce(theme_tokens, '{}'::jsonb),
     coalesce(section_photos, '{}'::jsonb),
     coalesce(enable_smart_rsvp, false),
-    coalesce(enable_photowall, false)
+    coalesce(enable_photowall, false),
+    coalesce(name_order, 'bride_first')
   from public.weddings
   where slug = p_slug
   limit 1;

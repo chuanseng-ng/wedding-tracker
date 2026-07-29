@@ -585,7 +585,8 @@ returns table (
   is_runsheet_published   boolean,
   extra_notice            text,
   enable_open_rsvp        boolean,
-  enable_photowall        boolean
+  enable_photowall        boolean,
+  name_order              text
 )
 language sql
 security definer
@@ -633,7 +634,8 @@ as $$
     coalesce(is_runsheet_published, false),
     coalesce(extra_notice, ''),
     coalesce(enable_open_rsvp, false),
-    coalesce(enable_photowall, false)
+    coalesce(enable_photowall, false),
+    coalesce(name_order, 'bride_first')
   from public.weddings
   limit 1;
 $$;
@@ -661,6 +663,9 @@ drop function if exists public.upsert_wedding_config(
 drop function if exists public.upsert_wedding_config(
   text, text, date, text, text, text, text, text, boolean, uuid, boolean, text
 );
+drop function if exists public.upsert_wedding_config(
+  text, text, date, text, text, text, text, text, boolean, uuid, boolean, text, boolean, text
+);
 
 create or replace function public.upsert_wedding_config(
   p_bride_name        text,
@@ -676,7 +681,8 @@ create or replace function public.upsert_wedding_config(
   p_enable_open_rsvp  boolean default false,
   p_rsvp_pin          text default '',
   p_enable_photowall  boolean default false,
-  p_photowall_pin     text default ''
+  p_photowall_pin     text default '',
+  p_name_order        text default 'bride_first'
 )
 returns void
 language plpgsql
@@ -712,6 +718,7 @@ begin
     enable_smart_rsvp, primary_meal_event_id,
     enable_open_rsvp, rsvp_pin,
     enable_photowall, photowall_pin,
+    name_order,
     updated_at
   ) values (
     left(coalesce(p_bride_name, ''), 120),
@@ -728,6 +735,9 @@ begin
     left(trim(coalesce(p_rsvp_pin, '')), 20),
     coalesce(p_enable_photowall, false),
     left(trim(coalesce(p_photowall_pin, '')), 20),
+    -- Clamp rather than trust: an unknown value degrades to the historical
+    -- bride-first rendering instead of tripping weddings_name_order_check.
+    case when p_name_order = 'groom_first' then 'groom_first' else 'bride_first' end,
     now()
   )
   on conflict ((true)) do update set
@@ -745,13 +755,14 @@ begin
     rsvp_pin          = excluded.rsvp_pin,
     enable_photowall  = excluded.enable_photowall,
     photowall_pin     = excluded.photowall_pin,
+    name_order        = excluded.name_order,
     updated_at        = now();
 end;
 $$;
 
 revoke all on function public.upsert_wedding_config(
-  text, text, date, text, text, text, text, text, boolean, uuid, boolean, text, boolean, text
+  text, text, date, text, text, text, text, text, boolean, uuid, boolean, text, boolean, text, text
 ) from public, anon;
 grant execute on function public.upsert_wedding_config(
-  text, text, date, text, text, text, text, text, boolean, uuid, boolean, text, boolean, text
+  text, text, date, text, text, text, text, text, boolean, uuid, boolean, text, boolean, text, text
 ) to authenticated;

@@ -1,5 +1,5 @@
 -- ─────────────────────────────────────────────────────────────────────────────
--- 0011_guest_dedupe.sql — near-duplicate guest detection + couple-only merge
+-- 0010_guest_dedupe.sql — near-duplicate guest detection + couple-only merge
 --
 -- Open RSVP (0008) matches a typed name against the guest list by EXACT
 -- case-insensitive equality only, so "Wei-Ming Tan" typed by someone already
@@ -7,18 +7,26 @@
 -- cleanup to the couple (guests.self_registered) but shipped no tooling for it.
 -- This migration adds the tooling:
 --
---   * normalize_guest_name()   — the shared matching rule (also used by 0012)
+--   * normalize_guest_name()   — the shared matching rule
 --   * guest_merges             — audit trail; a merge deletes a row, so the
 --                                whole row is snapshotted first
 --   * duplicate_dismissals     — "not a duplicate", so a pair stays dismissed
 --   * get_duplicate_candidates — couple-only scan, self-registered vs everyone
 --   * merge_guests             — couple-only, atomic
 --
+-- Depends on guests.self_registered (0008), so this file must stay numbered
+-- after 0008 — it cannot fold into the guest-domain file 0002.
+--
 -- merge_guests is the first guest WRITE in the app to go through a
 -- security-definer RPC (every other couple guest write goes direct to the table
 -- under RLS). It has to be: the merge touches guests, guest_event_rsvps and
 -- submissions together and must be all-or-nothing, and the client `sb` wrapper
 -- has no transaction helper.
+--
+-- The RSVP-email suppression guard that merge_guests relies on lives in the
+-- single definition of notify_rsvp_status_change in 0007_email_automation.sql
+-- — NOT here. 0007 is optional and applied out of numeric order, so a second
+-- copy in this file would be silently reverted whenever 0007 is applied last.
 --
 -- Idempotent: guarded creates, functions dropped and recreated, policies
 -- dropped before create (matching 0005).
@@ -42,7 +50,7 @@ as $$
 $$;
 
 comment on function public.normalize_guest_name(text) is
-  'Shared guest-name matching rule (case/punctuation/spacing insensitive). IMMUTABLE so guests_name_norm_idx can use it. Mirrored by normalizeGuestName() in src/lib/guestDedupe.js — keep both in sync.';
+  'Shared guest-name matching rule (case/punctuation/spacing insensitive). IMMUTABLE so it could back an index if one is ever added — deliberately none today; see the note above guests_name_trgm_idx. Mirrored by normalizeGuestName() in src/lib/guestDedupe.js — keep both in sync.';
 
 revoke all on function public.normalize_guest_name(text) from public;
 grant execute on function public.normalize_guest_name(text) to anon, authenticated;
@@ -244,60 +252,7 @@ comment on function public.dismiss_duplicate_pair(uuid, uuid) is
 revoke all on function public.dismiss_duplicate_pair(uuid, uuid) from public, anon;
 grant execute on function public.dismiss_duplicate_pair(uuid, uuid) to authenticated;
 
--- ── 6. RSVP-email suppression guard ───────────────────────────────────────────
--- notify_rsvp_status_change (0007) fires an outbound HTTP email on ANY
--- rsvp_status change. A merge can move the canonical from pending to confirmed,
--- which would email the guest a confirmation they did not just trigger. Recreate
--- the trigger function with a transaction-local opt-out that merge_guests sets.
---
--- Unchanged from 0007 apart from the guard — kept as a full body (not an ALTER)
--- so the final form of the function is readable in one place.
-create or replace function public.notify_rsvp_status_change()
-returns trigger
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_url    text;
-  v_secret text;
-begin
-  -- Set transaction-locally by merge_guests (0011): an administrative merge must
-  -- not look like the guest changing their own RSVP. current_setting(.., true)
-  -- returns null rather than raising when the setting was never set.
-  if coalesce(current_setting('app.suppress_rsvp_email', true), '') = 'on' then
-    return new;
-  end if;
-
-  if new.rsvp_status is distinct from old.rsvp_status
-     and new.rsvp_status in ('confirmed', 'declined')
-     and new.email != '' then
-
-    select decrypted_secret into v_url
-      from vault.decrypted_secrets where name = 'rsvp_email_webhook_url';
-    select decrypted_secret into v_secret
-      from vault.decrypted_secrets where name = 'rsvp_email_webhook_secret';
-
-    if v_url is not null and v_secret is not null then
-      perform net.http_post(
-        url     := v_url,
-        headers := jsonb_build_object(
-          'Content-Type',    'application/json',
-          'x-webhook-secret', v_secret
-        ),
-        body    := jsonb_build_object(
-          'guest_id',        new.id,
-          'old_rsvp_status', old.rsvp_status
-        )
-      );
-    end if;
-  end if;
-
-  return new;
-end;
-$$;
-
--- ── 7. merge_guests — couple-only, atomic ─────────────────────────────────────
+-- ── 6. merge_guests — couple-only, atomic ─────────────────────────────────────
 -- Folds p_duplicate_id into p_canonical_id and deletes the duplicate.
 --
 -- Semantics: the canonical wins every field it has a value for; the duplicate
