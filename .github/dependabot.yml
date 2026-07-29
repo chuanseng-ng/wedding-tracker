@@ -5,6 +5,17 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    groups:
+      # react-dom throws React error #527 at module load unless it resolves to
+      # the EXACT same version as react — a white blank page on every route. Its
+      # peer range is loose enough that npm accepts a split pair, so the two must
+      # never arrive in separate PRs. src/lib/reactVersions.test.js is the backstop.
+      react:
+        patterns:
+          - "react"
+          - "react-dom"
+          - "@types/react"
+          - "@types/react-dom"
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
