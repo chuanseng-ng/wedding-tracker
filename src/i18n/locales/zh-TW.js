@@ -8,11 +8,11 @@ export default {
   "common.language": "語言",
 
   // ── Wedding page ────────────────────────────────────────────────────────
-  "wedding.docTitle": "{bride} & {groom} · 婚禮",
+  "wedding.docTitle": "{couple} · 婚禮",
   "wedding.notFound.title": "找不到頁面",
   "wedding.notFound.body": "這個婚禮頁面不存在，或尚未設定。",
   "wedding.previewBanner": "預覽 — 此頁面尚未發佈，只有你能看到這個連結。",
-  "wedding.inviteTag": "✦ {groom} & {bride} 誠摯邀請您 ✦",
+  "wedding.inviteTag": "✦ {couple} 誠摯邀請您 ✦",
   "wedding.inviteTagFallback": "— — — 誠摯邀請您 — — —",
   "wedding.rsvpNow": "立即回覆",
   "wedding.loading": "正在載入婚禮頁面",
@@ -83,7 +83,7 @@ export default {
   "wedding.funq.firstdate": "第一次約會發生了什麼？",
 
   // ── RSVP page ───────────────────────────────────────────────────────────
-  "rsvp.docTitle": "婚禮回覆 · {bride} & {groom}",
+  "rsvp.docTitle": "婚禮回覆 · {couple}",
   "rsvp.invited": "誠摯邀請您",
   "rsvp.eyebrow": "婚禮回覆",
   "rsvp.loading": "正在載入您的資料…",

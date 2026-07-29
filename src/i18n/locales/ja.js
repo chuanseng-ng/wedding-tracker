@@ -8,11 +8,11 @@ export default {
   "common.language": "言語",
 
   // ── Wedding page ────────────────────────────────────────────────────────
-  "wedding.docTitle": "{bride} & {groom} · 結婚式",
+  "wedding.docTitle": "{couple} · 結婚式",
   "wedding.notFound.title": "ページが見つかりません",
   "wedding.notFound.body": "この結婚式ページは存在しないか、まだ設定されていません。",
   "wedding.previewBanner": "プレビュー — このページはまだ公開されていません。このリンクはあなただけが見られます。",
-  "wedding.inviteTag": "✦ {groom} & {bride} よりご招待します ✦",
+  "wedding.inviteTag": "✦ {couple} よりご招待します ✦",
   "wedding.inviteTagFallback": "— — — ご招待申し上げます — — —",
   "wedding.rsvpNow": "今すぐ出欠を登録",
   "wedding.loading": "結婚式ページを読み込んでいます",
@@ -83,7 +83,7 @@ export default {
   "wedding.funq.firstdate": "初デートでは何がありましたか？",
 
   // ── RSVP page ───────────────────────────────────────────────────────────
-  "rsvp.docTitle": "出欠登録 · {bride} & {groom} の結婚式",
+  "rsvp.docTitle": "出欠登録 · {couple} の結婚式",
   "rsvp.invited": "ご招待",
   "rsvp.eyebrow": "出欠登録",
   "rsvp.loading": "あなたの情報を読み込んでいます…",

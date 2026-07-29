@@ -10,6 +10,7 @@ import { weddingFloorplansPlan } from "../lib/weddingSource.js";
 import { cleanName, cleanNotes, cleanTable, cleanParty, cleanAmount, MAX_ANGBAO } from "../lib/validation.js";
 import { parseCSV, dedupeGuestImports, toCSV, guestImportTemplateCSV } from "../lib/csv.js";
 import { formatTime } from "../lib/format.js";
+import { coupleName, cleanNameOrder } from "../lib/coupleName.js";
 import { guestMatchesSearch } from "../lib/guestSearch.js";
 import { diffEvents } from "../lib/eventDiff.js";
 import { seedInviteRow } from "../lib/eventTargeting.js";
@@ -60,6 +61,7 @@ const DEMO_GUESTS = [
 const DEMO_WEDDING = {
   bride_name: "Siew Yong",
   groom_name: "Wei Ming",
+  name_order: "bride_first",
   wedding_date: "2026-12-12",
   venue_name: "The Grand Ballroom",
   venue_address: "123 Wedding Ave, Singapore",
@@ -700,9 +702,7 @@ function PayNowPage({ onBack, wedding }) {
       <style>{styles}</style>
       <div className="pin-screen">
         <div className="pin-logo">
-          {wedding?.bride_name && wedding?.groom_name
-            ? `♡ ${wedding.bride_name} & ${wedding.groom_name}`
-            : "♡ Send a Gift"}
+          {`♡ ${coupleName(wedding, { fallback: "Send a Gift" })}`}
         </div>
         <div className="pin-sub">PayNow · No app sign-in needed</div>
 
@@ -1168,6 +1168,7 @@ export default function WeddingTracker() {
         p_rsvp_pin: form.rsvp_pin || "",
         p_enable_photowall: !!form.enable_photowall,
         p_photowall_pin: form.photowall_pin || "",
+        p_name_order: cleanNameOrder(form.name_order),
       });
       await loadWedding();
       showToast("Wedding details saved");
@@ -1415,8 +1416,9 @@ export default function WeddingTracker() {
 
   // Personalise the browser tab title once we know the couple's names.
   useEffect(() => {
-    if (wedding?.bride_name && wedding?.groom_name) {
-      document.title = `${wedding.bride_name} & ${wedding.groom_name} · Wedding Planner`;
+    const couple = coupleName(wedding);
+    if (couple) {
+      document.title = `${couple} · Wedding Planner`;
     }
   }, [wedding]);
 
@@ -1861,9 +1863,8 @@ export default function WeddingTracker() {
 
   // Export CSV (cells are escaped against spreadsheet formula injection in toCSV).
   const exportCSV = () => {
-    const prefix = wedding?.bride_name && wedding?.groom_name
-      ? `${wedding.bride_name}-${wedding.groom_name}`.toLowerCase().replace(/\s+/g, "-")
-      : "wedding";
+    const prefix = coupleName(wedding, { sep: "-", fallback: "wedding" })
+      .toLowerCase().replace(/\s+/g, "-");
     download(toCSV(guests), `${prefix}-attendance.csv`, "text/csv");
   };
 
@@ -2003,9 +2004,9 @@ export default function WeddingTracker() {
             <div className="header-title">
               {wedding === undefined
                 ? "♡ —"
-                : wedding?.bride_name && wedding?.groom_name
-                  ? `♡ ${wedding.bride_name} & ${wedding.groom_name}`
-                  : mode === "planning" ? "♡ Wedding Planner" : "♡ Wedding Day"}
+                : `♡ ${coupleName(wedding, {
+                    fallback: mode === "planning" ? "Wedding Planner" : "Wedding Day",
+                  })}`}
             </div>
             <div className="header-subtitle">
               {mode === "planning" ? "RSVP & Seating Plan" : "Guest Attendance Tracker"}

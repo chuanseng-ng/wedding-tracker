@@ -3,6 +3,7 @@ import { cleanName, cleanVenueName, cleanVenueAddress } from "../lib/validation.
 import { MAX_PIN, cleanPin } from "../lib/openRsvp.js";
 import { blankEvent } from "../lib/eventDiff.js";
 import { EVENT_AUDIENCES } from "../lib/eventVisibility.js";
+import { DEFAULT_NAME_ORDER, cleanNameOrder, coupleName } from "../lib/coupleName.js";
 import { LOCALES } from "../i18n/index.jsx";
 
 // Locales guests can switch to on the public page (English is the source).
@@ -118,6 +119,7 @@ const blankForm = {
   rsvp_pin: "",
   enable_photowall: false,
   photowall_pin: "",
+  name_order: DEFAULT_NAME_ORDER,
 };
 
 // Map a persisted wedding_events row into the local editable draft shape.
@@ -160,6 +162,7 @@ export default function WeddingSetupTab({ wedding, events = [], onSave, onSaveEv
         rsvp_pin: wedding.rsvp_pin || "",
         enable_photowall: !!wedding.enable_photowall,
         photowall_pin: wedding.photowall_pin || "",
+        name_order: cleanNameOrder(wedding.name_order),
       });
     }
   }, [wedding]);
@@ -266,6 +269,7 @@ export default function WeddingSetupTab({ wedding, events = [], onSave, onSaveEv
       rsvp_pin: cleanPin(form.rsvp_pin),
       enable_photowall: form.enable_photowall,
       photowall_pin: cleanPin(form.photowall_pin),
+      name_order: cleanNameOrder(form.name_order),
     });
   };
 
@@ -288,6 +292,21 @@ export default function WeddingSetupTab({ wedding, events = [], onSave, onSaveEv
             <div className="setup-form-group">
               <label className="setup-form-label">Groom's name</label>
               <input className="setup-form-input" value={form.groom_name} onChange={set("groom_name")} placeholder="e.g. Wei Ming" />
+            </div>
+
+            {/* Applies everywhere the pair is shown — public page, RSVP form,
+                emails, calendar invite and the browser tab title. */}
+            <div className="setup-form-group full">
+              <label className="setup-form-label">Name order</label>
+              <select className="setup-form-select" value={form.name_order} onChange={set("name_order")}>
+                <option value="bride_first">Bride's name first</option>
+                <option value="groom_first">Groom's name first</option>
+              </select>
+              <div style={{ fontSize: 11, color: "rgba(92,74,42,0.55)", marginTop: 4 }}>
+                {coupleName(form)
+                  ? `Shown as “${coupleName(form)}” on your wedding page, RSVP form and emails`
+                  : "Fill in both names to preview how they'll appear"}
+              </div>
             </div>
 
             <div className="setup-form-group">

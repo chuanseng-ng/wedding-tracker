@@ -8,11 +8,11 @@ export default {
   "common.language": "언어",
 
   // ── Wedding page ────────────────────────────────────────────────────────
-  "wedding.docTitle": "{bride} & {groom} · 결혼식",
+  "wedding.docTitle": "{couple} · 결혼식",
   "wedding.notFound.title": "페이지를 찾을 수 없습니다",
   "wedding.notFound.body": "이 결혼식 페이지가 존재하지 않거나 아직 설정되지 않았습니다.",
   "wedding.previewBanner": "미리보기 — 이 페이지는 아직 게시되지 않았습니다. 이 링크는 본인만 볼 수 있습니다.",
-  "wedding.inviteTag": "✦ {groom} & {bride}가 당신을 초대합니다 ✦",
+  "wedding.inviteTag": "✦ {couple}가 당신을 초대합니다 ✦",
   "wedding.inviteTagFallback": "— — — 진심으로 초대합니다 — — —",
   "wedding.rsvpNow": "지금 참석 여부 알리기",
   "wedding.loading": "웨딩 페이지를 불러오는 중",
@@ -83,7 +83,7 @@ export default {
   "wedding.funq.firstdate": "첫 데이트에서 무슨 일이 있었나요?",
 
   // ── RSVP page ───────────────────────────────────────────────────────────
-  "rsvp.docTitle": "참석 회신 · {bride} & {groom}의 결혼식",
+  "rsvp.docTitle": "참석 회신 · {couple}의 결혼식",
   "rsvp.invited": "당신을 초대합니다",
   "rsvp.eyebrow": "참석 회신",
   "rsvp.loading": "정보를 불러오는 중…",

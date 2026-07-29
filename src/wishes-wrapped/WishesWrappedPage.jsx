@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { theme } from '../shared/theme.js';
+import { coupleName, partyOrder } from '../lib/coupleName.js';
 import { ArrowLeft, ArrowRight, Play, Pause, CornersOut, CornersIn, Sparkle } from '@phosphor-icons/react';
 
 // ─── Vibrant gradient backgrounds (one per slide type) ────────────────────────
@@ -354,8 +355,7 @@ const wwStyles = theme + `
 // ─── SLIDE COMPONENTS ────────────────────────────────────────────────────────
 
 function TitleSlide({ wedding, totalWishes, bg }) {
-  const names = wedding?.bride_name && wedding?.groom_name
-    ? `${wedding.bride_name} & ${wedding.groom_name}` : null;
+  const names = coupleName(wedding) || null;
   return (
     <div className="ww-slide" style={bg ? { background: bg } : {}}>
       <Sparkle size={52} color="var(--ww-accent)" weight="light" style={{ marginBottom: 20, opacity: 0.85 }} />
@@ -491,26 +491,37 @@ function NumbersSlide({ totalWishes, totalWords, avgLength, novelPages, bg }) {
   );
 }
 
+const SIDE_META = {
+  bride: { label: 'Bride', emoji: '💐', nameKey: 'bride_name' },
+  groom: { label: 'Groom', emoji: '🤵', nameKey: 'groom_name' },
+};
+
 function SideVsSideSlide({ sides, wedding, bg }) {
-  const brideName = wedding?.bride_name || 'Bride';
-  const groomName = wedding?.groom_name || 'Groom';
+  // Which side reads on the left follows the couple's chosen name order; the
+  // underlying `sides` keys stay bride/groom.
+  const [leftKey, rightKey] = partyOrder(wedding);
+  const meta = (key) => ({
+    ...SIDE_META[key],
+    name: wedding?.[SIDE_META[key].nameKey] || SIDE_META[key].label,
+  });
+  const left = meta(leftKey), right = meta(rightKey);
 
   const rows = [
-    { label: 'Messages',     b: sides.bride.wishers,    g: sides.groom.wishers },
-    { label: 'Avg Words',    b: sides.bride.avgWords,   g: sides.groom.avgWords },
-    { label: 'Total Emojis', b: sides.bride.emojiCount, g: sides.groom.emojiCount },
+    { label: 'Messages',     l: sides[leftKey].wishers,    r: sides[rightKey].wishers },
+    { label: 'Avg Words',    l: sides[leftKey].avgWords,   r: sides[rightKey].avgWords },
+    { label: 'Total Emojis', l: sides[leftKey].emojiCount, r: sides[rightKey].emojiCount },
   ];
 
-  let brideWins = 0, groomWins = 0;
-  for (const r of rows) {
-    if (r.b > r.g) brideWins++;
-    else if (r.g > r.b) groomWins++;
+  let leftWins = 0, rightWins = 0;
+  for (const row of rows) {
+    if (row.l > row.r) leftWins++;
+    else if (row.r > row.l) rightWins++;
   }
 
-  const verdict = brideWins > groomWins
-    ? `💐 ${brideName}'s side wins ${brideWins}:${groomWins}`
-    : groomWins > brideWins
-    ? `🤵 ${groomName}'s side wins ${groomWins}:${brideWins}`
+  const verdict = leftWins > rightWins
+    ? `${left.emoji} ${left.name}'s side wins ${leftWins}:${rightWins}`
+    : rightWins > leftWins
+    ? `${right.emoji} ${right.name}'s side wins ${rightWins}:${leftWins}`
     : 'Love wins on both sides 💝';
 
   const nameStyle = {
@@ -523,20 +534,20 @@ function SideVsSideSlide({ sides, wedding, bg }) {
 
   return (
     <div className="ww-slide" style={bg ? { background: bg } : {}}>
-      <div className="ww-slide-label">Bride's Side vs Groom's Side</div>
+      <div className="ww-slide-label">{left.label}&apos;s Side vs {right.label}&apos;s Side</div>
 
       <div style={{ width: '100%', maxWidth: '640px', marginTop: '8px' }}>
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'flex-end', marginBottom: '4px' }}>
-          <div style={{ ...nameStyle, flex: 1, textAlign: 'right' }}>💐 {brideName}</div>
+          <div style={{ ...nameStyle, flex: 1, textAlign: 'right' }}>{left.emoji} {left.name}</div>
           <div style={{ flex: '0 0 90px' }} />
-          <div style={{ ...nameStyle, flex: 1, textAlign: 'left' }}>🤵 {groomName}</div>
+          <div style={{ ...nameStyle, flex: 1, textAlign: 'left' }}>{right.emoji} {right.name}</div>
         </div>
 
         {divider}
 
-        {rows.map(({ label, b, g }) => {
-          const bWins = b > g, gWins = g > b;
+        {rows.map(({ label, l, r }) => {
+          const lWins = l > r, rWins = r > l;
           return (
             <div key={label} style={{ display: 'flex', alignItems: 'center', marginBottom: '14px' }}>
               <div style={{
@@ -544,9 +555,9 @@ function SideVsSideSlide({ sides, wedding, bg }) {
                 fontFamily: "'Cormorant Garamond', serif",
                 fontSize: 'clamp(36px, 6vw, 68px)',
                 lineHeight: 1.05,
-                color: bWins ? 'var(--ww-text)' : 'var(--ww-muted)',
-                fontWeight: bWins ? 600 : 300,
-              }}>{b}</div>
+                color: lWins ? 'var(--ww-text)' : 'var(--ww-muted)',
+                fontWeight: lWins ? 600 : 300,
+              }}>{l}</div>
               <div style={{
                 flex: '0 0 90px', textAlign: 'center',
                 fontFamily: "'DM Sans', sans-serif",
@@ -559,9 +570,9 @@ function SideVsSideSlide({ sides, wedding, bg }) {
                 fontFamily: "'Cormorant Garamond', serif",
                 fontSize: 'clamp(36px, 6vw, 68px)',
                 lineHeight: 1.05,
-                color: gWins ? 'var(--ww-text)' : 'var(--ww-muted)',
-                fontWeight: gWins ? 600 : 300,
-              }}>{g}</div>
+                color: rWins ? 'var(--ww-text)' : 'var(--ww-muted)',
+                fontWeight: rWins ? 600 : 300,
+              }}>{r}</div>
             </div>
           );
         })}
@@ -714,8 +725,7 @@ function AwardSlide({ icon, title, award, bg }) {
 }
 
 function ThankYouSlide({ wedding, bg }) {
-  const names = wedding?.bride_name && wedding?.groom_name
-    ? `${wedding.bride_name} & ${wedding.groom_name}` : null;
+  const names = coupleName(wedding) || null;
   const date = wedding?.wedding_date
     ? new Date(wedding.wedding_date + 'T00:00:00').toLocaleDateString('en-SG', {
         day: 'numeric', month: 'long', year: 'numeric',

@@ -8,11 +8,11 @@ export default {
   "common.language": "Language",
 
   // ── Wedding page ────────────────────────────────────────────────────────
-  "wedding.docTitle": "{bride} & {groom} · Wedding",
+  "wedding.docTitle": "{couple} · Wedding",
   "wedding.notFound.title": "Page not found",
   "wedding.notFound.body": "This wedding page doesn't exist or hasn't been set up yet.",
   "wedding.previewBanner": "Preview — this page isn't published yet. Only you can see this link.",
-  "wedding.inviteTag": "✦ {groom} & {bride} invite you ✦",
+  "wedding.inviteTag": "✦ {couple} invite you ✦",
   "wedding.inviteTagFallback": "— — — You are cordially invited — — —",
   "wedding.rsvpNow": "RSVP Now",
   "wedding.loading": "Loading wedding page",
@@ -84,7 +84,7 @@ export default {
   "wedding.funq.firstdate": "What happened on your first date?",
 
   // ── RSVP page ───────────────────────────────────────────────────────────
-  "rsvp.docTitle": "RSVP · {bride} & {groom}'s Wedding",
+  "rsvp.docTitle": "RSVP · {couple}'s Wedding",
   "rsvp.invited": "You're Invited",
   "rsvp.eyebrow": "RSVP",
   "rsvp.loading": "Loading your details…",
