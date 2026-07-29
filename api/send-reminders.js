@@ -4,6 +4,7 @@ import { escapeHtml } from "./_lib/escapeHtml.js";
 import { secureCompare } from "./_lib/secureCompare.js";
 import { selectDueReminders, computeDueDate } from "../src/lib/checklistUtils.js";
 import { localDateISO } from "../src/lib/budgetUtils.js";
+import { coupleName } from "../src/lib/coupleName.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -76,7 +77,7 @@ export default async function handler(req, res) {
   const supabase = supabaseAdmin();
   const { data: wedding } = await supabase
     .from("weddings")
-    .select("bride_name, groom_name, wedding_date, venue_name, venue_address, dress_code, tea_ceremony_time, ceremony_time, dinner_time, hero_image_url, getting_there, slug, is_published, checklist")
+    .select("bride_name, groom_name, name_order, wedding_date, venue_name, venue_address, dress_code, tea_ceremony_time, ceremony_time, dinner_time, hero_image_url, getting_there, slug, is_published, checklist")
     .limit(1)
     .single();
   if (!wedding) return res.status(200).json({ sent: 0, checklistSent: 0, reason: "wedding not configured yet" });
@@ -102,7 +103,7 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: "email sending is not configured" });
   }
 
-  const coupleNames = `${wedding.bride_name} & ${wedding.groom_name}`;
+  const coupleNames = coupleName(wedding, { fallback: "Our Wedding" });
   const siteUrl = (process.env.SITE_URL || "").replace(/\/$/, "");
 
   // The two jobs are independent: run both, report each outcome; one failing

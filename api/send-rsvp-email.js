@@ -3,6 +3,7 @@ import { buildIcs } from "./_lib/ics.js";
 import { sendEmail, getFromAddress, missingEmailEnvVars } from "./_lib/emailProvider.js";
 import { escapeHtml, sanitizeSubject } from "./_lib/escapeHtml.js";
 import { secureCompare } from "./_lib/secureCompare.js";
+import { coupleName } from "../src/lib/coupleName.js";
 
 function toTitleCase(str) {
   return str.replace(/\w\S*/g, (w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
@@ -180,12 +181,14 @@ export default async function handler(req, res) {
 
   const { data: wedding } = await supabase
     .from("weddings")
-    .select("bride_name, groom_name, hero_image_url, wedding_date, ceremony_time, dinner_time, venue_name, venue_address")
+    .select("bride_name, groom_name, name_order, hero_image_url, wedding_date, ceremony_time, dinner_time, venue_name, venue_address")
     .limit(1)
     .single();
   if (!wedding) return res.status(200).json({ skipped: "wedding not configured" });
 
-  const coupleNames = `${wedding.bride_name} & ${wedding.groom_name}`;
+  // Fallback guards the from-name and subject line against a wedding row saved
+  // with blank names (some providers reject an empty display name).
+  const coupleNames = coupleName(wedding, { fallback: "Our Wedding" });
   const guestName = toTitleCase(guest.name);
   const heroImageUrl = wedding.hero_image_url || "";
 

@@ -6,6 +6,7 @@ import { ClipboardText } from "@phosphor-icons/react";
 import { useLocale } from "../i18n/index.jsx";
 import LanguageSwitcher from "../i18n/LanguageSwitcher.jsx";
 import { upgradeRunsheet, formatTimeLabel } from "../lib/runsheetTime.js";
+import { coupleName } from "../lib/coupleName.js";
 import RunsheetGantt from "../shared/RunsheetGantt.jsx";
 
 const styles = theme + `
@@ -257,7 +258,7 @@ export default function RunsheetPage() {
       <header className="rs-page-header">
         <LanguageSwitcher style={{ position: "absolute", top: 12, right: 12, color: "rgba(255,255,255,0.75)", background: "rgba(255,255,255,0.08)" }} />
         <div className="rs-page-subtitle">{t("runsheet.subtitle")}</div>
-        <div className="rs-page-couple">{wedding.bride_name} &amp; {wedding.groom_name}</div>
+        <div className="rs-page-couple">{coupleName(wedding)}</div>
         <div className="rs-page-meta">
           {formatDate(wedding.wedding_date)}{wedding.venue_name ? ` · ${wedding.venue_name}` : ""}
         </div>

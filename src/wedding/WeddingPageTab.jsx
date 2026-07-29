@@ -4,6 +4,7 @@ import { LOCALES } from "../i18n/index.jsx";
 import { isCompleteThemeTokens } from "../lib/themeTokens.js";
 import { SECTION_PHOTO_SLOTS, MAX_PHOTOS_PER_SLOT, normalizeSectionPhotos } from "../lib/sectionPhotos.js";
 import { FOCAL_POINTS, normalizeFocalPoint } from "../lib/heroFocalPoint.js";
+import { coupleParts, partyOrder } from "../lib/coupleName.js";
 
 // Read a File as a base64 string (without the data: URL prefix) for the vision API.
 function fileToBase64(file) {
@@ -268,9 +269,12 @@ function slugify(s) {
     .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
 
-function defaultSlug(bride, groom) {
-  if (!bride || !groom) return "";
-  return `${slugify(groom)}-and-${slugify(bride)}`;
+// Suggested only — offered when the slug field is still empty, so an already
+// saved public URL is never rewritten by a name-order change.
+function defaultSlug(wedding) {
+  const [first, second] = coupleParts(wedding);
+  if (!first || !second) return "";
+  return `${slugify(first)}-and-${slugify(second)}`;
 }
 
 function buildCustomQA(funQa) {
@@ -325,7 +329,7 @@ export default function WeddingPageTab({ wedding, onSave, showToast }) {
 
   useEffect(() => {
     if (!wedding) return;
-    const auto = defaultSlug(wedding.bride_name, wedding.groom_name);
+    const auto = defaultSlug(wedding);
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setSlug(wedding.slug || auto);
     setLoveStory(wedding.love_story || "");
@@ -444,9 +448,14 @@ export default function WeddingPageTab({ wedding, onSave, showToast }) {
   };
 
   // ── Per-locale content-translation helpers (edit the active locale) ──
+  const nameFields = {
+    bride: { key: "bride_name", label: "Bride's Name", en: wedding?.bride_name || "" },
+    groom: { key: "groom_name", label: "Groom's Name", en: wedding?.groom_name || "" },
+  };
   const sourceFields = [
-    { key: "bride_name",     label: "Bride's Name",    en: wedding?.bride_name || "" },
-    { key: "groom_name",     label: "Groom's Name",    en: wedding?.groom_name || "" },
+    // Listed in the couple's chosen display order, so this editor reads the same
+    // way the public page does.
+    ...partyOrder(wedding).map((side) => nameFields[side]),
     { key: "love_story",     label: "Your Story",      en: loveStory },
     { key: "dress_code",     label: "Dress Code",      en: dresscode },
     { key: "venue_name",     label: "Venue Name",      en: wedding?.venue_name || "" },
@@ -615,7 +624,7 @@ export default function WeddingPageTab({ wedding, onSave, showToast }) {
 
     setSaving(true);
     await onSave({
-      slug: slug.trim() || defaultSlug(wedding?.bride_name, wedding?.groom_name),
+      slug: slug.trim() || defaultSlug(wedding),
       love_story:      loveStory.trim(),
       dress_code:      dresscode.trim(),
       hero_image_url:  heroUrl.trim(),

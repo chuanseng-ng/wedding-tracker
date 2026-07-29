@@ -8,11 +8,11 @@ export default {
   "common.language": "Bahasa",
 
   // ── Wedding page ────────────────────────────────────────────────────────
-  "wedding.docTitle": "{bride} & {groom} · Majlis Perkahwinan",
+  "wedding.docTitle": "{couple} · Majlis Perkahwinan",
   "wedding.notFound.title": "Halaman tidak dijumpai",
   "wedding.notFound.body": "Halaman perkahwinan ini tidak wujud atau belum disediakan.",
   "wedding.previewBanner": "Pratonton — halaman ini belum diterbitkan. Hanya anda boleh melihat pautan ini.",
-  "wedding.inviteTag": "✦ {groom} & {bride} menjemput anda ✦",
+  "wedding.inviteTag": "✦ {couple} menjemput anda ✦",
   "wedding.inviteTagFallback": "— — — Anda dijemput dengan penuh hormat — — —",
   "wedding.rsvpNow": "Sahkan Kehadiran Sekarang",
   "wedding.loading": "Memuatkan halaman majlis perkahwinan",
@@ -83,7 +83,7 @@ export default {
   "wedding.funq.firstdate": "Apa yang berlaku pada temu janji pertama anda?",
 
   // ── RSVP page ───────────────────────────────────────────────────────────
-  "rsvp.docTitle": "Pengesahan Kehadiran · Majlis {bride} & {groom}",
+  "rsvp.docTitle": "Pengesahan Kehadiran · Majlis {couple}",
   "rsvp.invited": "Anda Dijemput",
   "rsvp.eyebrow": "Pengesahan Kehadiran",
   "rsvp.loading": "Memuatkan butiran anda…",

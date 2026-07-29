@@ -5,6 +5,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [2026-07-29] — Couple name order
+
+### Added
+
+- **"Name order" setting in Wedding Setup** ([`0012_couple_name_order.sql`](supabase/migrations/0012_couple_name_order.sql)) — the couple picks whether the bride's or the groom's name reads first, with a live preview under the dropdown. Stored as `weddings.name_order` (`'bride_first'` default, `'groom_first'`, CHECK-constrained), so the default reproduces the previous rendering exactly and no existing deployment changes on upgrade. The order applies everywhere the pair is shown: public wedding page and runsheet, RSVP form, confirmation + reminder emails, the `.ics` calendar invite, Wishes Wrapped, CSV export filenames and the browser tab title.
+- **`src/lib/coupleName.js`** — the single source of truth for ordering and joining the two names (`coupleParts`, `coupleName`, `partyOrder`, `cleanNameOrder`; 13 unit tests). Pure and dependency-free, so `api/send-rsvp-email.js` and `api/send-reminders.js` import it for the email templates. The order was previously hardcoded at ~20 call sites and **was not self-consistent** — the public slug built `${groom}-and-${bride}` while every display built `${bride} & ${groom}`.
+- [`supabase/tests/couple_name_order_verification.sql`](supabase/tests/couple_name_order_verification.sql) — self-asserting manual verification for the column, its CHECK, the append-only reader column order, the upsert round-trip/clamp, and the grants.
+
+### Changed
+
+- **`get_wedding_config`, `get_public_wedding` and `get_public_runsheet` now return `name_order`** as their last column (append-only — the clients read these rows positionally), and `upsert_wedding_config` takes a trailing `p_name_order` that clamps an unknown value to `'bride_first'` rather than tripping the CHECK. The superseded 14-argument overload is dropped so PostgREST RPC resolution stays unambiguous.
+- **Locale keys that interpolated both names now take one pre-joined `{couple}`** — `wedding.docTitle`, `rsvp.docTitle` and `wedding.inviteTag`, across all six locales. Baking two positional placeholders into a translation string made the order untranslatable *and* unorderable; `wedding.inviteTag` had drifted to groom-first as a result (it is unreferenced, but is normalised so no stale ordering survives).
+- The wedding-page slug suggestion and the RSVP "closer to" side buttons, the Wishes Wrapped bride-vs-groom slide, and the translation editor's two name rows all follow the setting. Already-saved slugs are never rewritten — the suggestion only fills an empty field. Guest-side `party` semantics (which side a guest belongs to) are untouched.
+
+---
+
 ## [2026-07-29] — Duplicate guest detection & merge
 
 ### Added
