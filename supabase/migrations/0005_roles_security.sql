@@ -283,6 +283,37 @@ grant execute on function public.get_wishes_guests() to authenticated;
 comment on function public.get_wishes_guests() is
   'Intentionally helper-callable (#149): read-only wishes projection for the D-Day Wishes Wrapped presentation. Exposes name/side/relationship-group/RSVP status/well-wish message only — keep contact details, notes, tokens and financial columns OUT.';
 
+-- ── 8d. get_wedding_floorplans — helper-safe floorplans projection ────────────
+-- weddings_select is couple-only (0003 §2), so the helper cannot read the
+-- weddings row at all. The D-Day floorplan/seating view still needs the
+-- floorplan snapshots (#162), so expose ONLY that column through a
+-- security-definer projection — RLS cannot hide columns, which is the same
+-- rationale as get_checkin_guests above. Not granted to anon: floorplans are
+-- deliberately kept out of the anon-granted get_wedding_config so they never
+-- ship to the public page.
+drop function if exists public.get_wedding_floorplans();
+create function public.get_wedding_floorplans()
+returns table (
+  floorplans jsonb
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  -- Column is alias-qualified so it can never collide with the `returns table`
+  -- output name. weddings is a singleton (one row), so limit 1 is exact.
+  select w.floorplans
+  from public.weddings w
+  limit 1;
+$$;
+
+revoke all on function public.get_wedding_floorplans() from public, anon;
+grant execute on function public.get_wedding_floorplans() to authenticated;
+
+comment on function public.get_wedding_floorplans() is
+  'Helper-safe projection of the singleton weddings row exposing ONLY floorplans (#162), so the D-Day helper seating/floorplan view keeps working after weddings_select was restricted to the couple. RLS cannot hide columns, so the helper reads floorplans through this instead of a direct select. Keep couple-only columns (overall_budget_cap, budget_categories, checklist, rsvp_pin, photowall_pin) OUT — and do NOT grant to anon (get_wedding_config stays floorplan-free).';
+
 -- ── 9. Audit trail: security-definer write RPCs that stay open to the helper ──
 -- Reviewed alongside #101. Every other client-callable security-definer write
 -- is either gated (upsert_wedding_config / upsert_wedding_page / upsert_runsheet

@@ -26,7 +26,7 @@ This project is configured so that:
 
 ### Required setup to be secure
 
-1. Run the migrations in `supabase/migrations/` (0001–0009; 0007 is the
+1. Run the migrations in `supabase/migrations/` (0001–0010; 0007 is the
    optional email automation) in your Supabase project.
 2. In **Authentication → Providers → Email**, create one helper user and
    **disable public sign-ups** so strangers can't self-register an account.
@@ -65,11 +65,11 @@ This project is configured so that:
   image — don't upload anything secret. Metadata writes are couple-only via the
   `upsert_floorplans` RPC (`0006_planning_features.sql`); the helper's read-only
   view reads the floorplan column through the `get_wedding_floorplans()`
-  security-definer projection (`0010_weddings_helper_read_hardening.sql`), which
+  security-definer projection (`0005_roles_security.sql`), which
   exposes only that column, and the column is deliberately kept out of the
   anon-granted `get_wedding_config()`.
 - **The `weddings` row itself is couple-only for direct reads
-  (`0010_weddings_helper_read_hardening.sql`).** The `weddings_select` RLS policy
+  (`0003_weddings_page.sql`).** The `weddings_select` RLS policy
   is `using (not is_helper())`, so a signed-in helper cannot `select` the row
   directly. This closes a gap where the earlier `using (true)` policy let a
   helper read couple-only columns (`overall_budget_cap`, `budget_categories`,
@@ -203,7 +203,7 @@ This project is configured so that:
   is strictly tighter than the by-name path above.
 
 - **Guest merge is couple-only and audited**
-  ([`0011_guest_dedupe.sql`](supabase/migrations/0011_guest_dedupe.sql)).
+  ([`0010_guest_dedupe.sql`](supabase/migrations/0010_guest_dedupe.sql)).
   `merge_guests` and `dismiss_duplicate_pair` are `security definer`, so they
   bypass RLS and carry their own `is_helper()` gate raising `42501`;
   `get_duplicate_candidates` gates in its `WHERE` clause and returns zero rows

@@ -1,7 +1,9 @@
--- Manual verification for the couple name-order setting (0012_couple_name_order.sql):
--- the weddings.name_order column, its CHECK, the three readers that must expose
--- it as their LAST column (the clients read those rows positionally), and the
--- upsert_wedding_config round-trip + grants.
+-- Manual verification for the couple name-order setting: the weddings.name_order
+-- column and its CHECK (0003_weddings_page.sql), the three readers that must
+-- expose it as their LAST column (get_public_wedding in 0003, get_wedding_config
+-- in 0004_smart_rsvp.sql, get_public_runsheet in 0006_planning_features.sql —
+-- the clients read those rows positionally), and the upsert_wedding_config
+-- (0004) round-trip + grants.
 --
 -- Run by hand after applying migrations, in the Supabase SQL editor or `psql`
 -- against a local `supabase start` stack (same convention as
