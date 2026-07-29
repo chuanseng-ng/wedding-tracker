@@ -5,6 +5,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [2026-07-29] — Duplicate guest detection & merge
+
+### Added
+
+- **"Possible duplicates" panel in the RSVP tab** ([`0011_guest_dedupe.sql`](supabase/migrations/0011_guest_dedupe.sql)) — open RSVP matched typed names against the guest list by *exact* case-insensitive equality only, so a guest already invited as "Wei Ming Tan" who typed "Wei-Ming Tan" silently became a second guest row. `0008_open_rsvp` deferred that cleanup to the couple via the `self_registered` flag but shipped no tooling for it; this adds it. A couple-only panel lists self-registered guests whose name matches an existing guest (identical after collapsing case/punctuation/spacing, or trigram similarity ≥ 0.55) and offers **Merge…** or **Not a duplicate**.
+- **`merge_guests` RPC** — couple-only (`is_helper()` gate, `42501`) and atomic: the canonical guest wins every field it has a value for, the duplicate fills blanks only, per-event answers reconcile newest-first, plus-ones are reparented *before* the delete (`primary_guest_id` is `ON DELETE CASCADE`), `submissions.matched_guest_id` is repointed rather than orphaned, and the draw number transfers without tripping its unique constraint. Check-in and ang-bao state are carried over, never cleared. The full deleted row plus its event answers and plus-ones are snapshotted into a new append-only `guest_merges` audit table (couple-only `SELECT`, no write policy for any role), so a mistaken merge is recoverable by hand.
+- **`normalize_guest_name`** — the shared matching rule, mirrored in JS by `src/lib/guestDedupe.js` (42 unit tests). Uses `[[:alnum:]]` / `\p{L}\p{N}` rather than `[a-z0-9]` so CJK names survive normalization.
+- [`supabase/tests/guest_merge_verification.sql`](supabase/tests/guest_merge_verification.sql) — self-asserting manual verification for the merge, the helper gate, and the guard rails.
+
+### Fixed
+
+- **An administrative merge no longer emails the guest.** `notify_rsvp_status_change` ([`0007`](supabase/migrations/0007_email_automation.sql)) fires on *any* `rsvp_status` change, so a merge that moved the canonical from pending to confirmed would have sent a confirmation the guest never triggered. The trigger function now honours a transaction-local `app.suppress_rsvp_email` opt-out that `merge_guests` sets.
+
+---
+
 ## [2026-07-23] — Migrations consolidated: 13 files → 9 domain files
 
 ### Changed

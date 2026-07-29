@@ -852,6 +852,7 @@ export default function WeddingTracker() {
   const [wedding, setWedding] = useState(undefined); // undefined = not fetched, null = no row yet, object = configured
   const [weddingEvents, setWeddingEvents] = useState([]); // smart-RSVP event list (#78)
   const [eventRsvps, setEventRsvps] = useState([]); // guest_event_rsvps rows for the targeting grid (#78)
+  const [duplicates, setDuplicates] = useState([]); // near-duplicate guest pairs awaiting review
   const [setupOpen, setSetupOpen] = useState(false);
   const [pendingDelete, setPendingDelete] = useState(null);
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
@@ -1112,7 +1113,8 @@ export default function WeddingTracker() {
     try {
       const { data, error } = await supabase
         .from("guest_event_rsvps")
-        .select("guest_id, event_id, invited, status, meal_choice");
+        // responded_at feeds the newest-wins preview in DuplicatesPanel.
+        .select("guest_id, event_id, invited, status, meal_choice, responded_at");
       if (error) throw error;
       setEventRsvps(Array.isArray(data) ? data : []);
     } catch {
@@ -1120,12 +1122,29 @@ export default function WeddingTracker() {
     }
   }, []);
 
+  // Near-duplicate guests awaiting the couple's decision (#164 follow-up).
+  // Couple-only: the RPC is helper-gated and returns zero rows for a helper, so
+  // a failure or an un-migrated DB simply leaves the panel hidden.
+  const loadDuplicates = useCallback(async () => {
+    if (isDemoMode || role === "helper") {
+      setDuplicates([]);
+      return;
+    }
+    try {
+      const rows = await sb.rpc("get_duplicate_candidates", {});
+      setDuplicates(Array.isArray(rows) ? rows : []);
+    } catch {
+      setDuplicates([]);
+    }
+  }, [role]);
+
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadWedding();
     loadEvents();
     loadEventRsvps();
-  }, [loadWedding, loadEvents, loadEventRsvps]);
+    loadDuplicates();
+  }, [loadWedding, loadEvents, loadEventRsvps, loadDuplicates]);
 
   const saveWedding = async (form) => {
     if (isDemoMode) {
@@ -1702,6 +1721,65 @@ export default function WeddingTracker() {
       } catch { return syncFail("Could not remove guest — check connection"); }
     }
     showToast(`${guest.name} removed`, () => undoDelete(guest));
+  };
+
+  // Fold a near-duplicate guest into the canonical one. Unlike every other
+  // guest write in this file, this goes through a security-definer RPC: the
+  // merge spans guests, guest_event_rsvps and submissions and has to be
+  // atomic, and `sb` has no transaction helper. The RPC snapshots the deleted
+  // row into guest_merges, so a wrong merge is recoverable.
+  //
+  // No optimistic update — the server decides what survives, so both rows are
+  // held in pendingIds until the refetch lands, keeping the 5 s poll from
+  // showing a half-merged state.
+  const mergeGuests = async (canonicalId, duplicateId) => {
+    if (isDemoMode) return false;
+    pendingIds.current.add(canonicalId);
+    pendingIds.current.add(duplicateId);
+    try {
+      await sb.rpc("merge_guests", {
+        p_canonical_id: canonicalId,
+        p_duplicate_id: duplicateId,
+      });
+      // Inside the try so pendingIds still covers the refetch — releasing the
+      // guard first would let the 5 s poll land in between and paint a
+      // half-merged list. Both loaders swallow their own errors, so they cannot
+      // trip the catch below and mislabel a successful merge as a failure.
+      await loadGuests();
+      await loadEventRsvps();
+    } catch {
+      syncFail("Could not merge guests — check connection");
+      return false;
+    } finally {
+      pendingIds.current.delete(canonicalId);
+      pendingIds.current.delete(duplicateId);
+    }
+    await loadDuplicates();
+    showToast("Guests merged");
+    return true;
+  };
+
+  // "Not a duplicate" — remembers the pair so it stops being offered.
+  const dismissDuplicate = async (guestA, guestB) => {
+    if (isDemoMode) return;
+    // Direction-agnostic: two self-registered walk-ins that match each other are
+    // offered as one pair, but the server stores the dismissal canonically —
+    // filtering only the clicked direction could strand its mirror on screen.
+    setDuplicates((d) =>
+      d.filter(
+        (c) =>
+          !(
+            (c.duplicate_id === guestA && c.canonical_id === guestB) ||
+            (c.duplicate_id === guestB && c.canonical_id === guestA)
+          )
+      )
+    );
+    try {
+      await sb.rpc("dismiss_duplicate_pair", { p_guest_a: guestA, p_guest_b: guestB });
+    } catch {
+      syncFail("Could not save — check connection");
+      await loadDuplicates();
+    }
   };
 
   // Undo a delete by re-inserting the guest (a new id is assigned by the DB).
@@ -2333,6 +2411,9 @@ export default function WeddingTracker() {
               onSetInvited={setGuestInvited}
               onBulkInvite={bulkInvite}
               onSetEventResponse={setEventResponse}
+              duplicates={duplicates}
+              onMergeGuests={mergeGuests}
+              onDismissDuplicate={dismissDuplicate}
             />
           ) : view === "seating" ? (
             <SeatingTab

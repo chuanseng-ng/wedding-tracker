@@ -1,4 +1,5 @@
 import { useState } from "react";
+import DuplicatesPanel from "./DuplicatesPanel.jsx";
 import EventTargeting from "./EventTargeting.jsx";
 import QrCodeModal from "./QrCodeModal.jsx";
 import QrPrintSheet from "./QrPrintSheet.jsx";
@@ -125,6 +126,7 @@ export default function RsvpTab({
   guests, onUpdate, onDelete, showToast,
   enableSmartRsvp = false, events = [], eventRsvps = [], primaryMealEventId = null,
   onSetInvited, onBulkInvite, onSetEventResponse,
+  duplicates = [], onMergeGuests, onDismissDuplicate,
 }) {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -260,6 +262,17 @@ export default function RsvpTab({
     <>
       <style>{styles}</style>
       <div className="rsvp-tab">
+        {/* Open-RSVP near-duplicates awaiting the couple's decision. Renders
+            nothing when there are none, which is the normal state. */}
+        <DuplicatesPanel
+          candidates={duplicates}
+          guests={guests}
+          events={activeEvents}
+          eventRsvps={eventRsvps}
+          onMerge={onMergeGuests}
+          onDismiss={onDismissDuplicate}
+        />
+
         {/* Per-guest event targeting (#78) */}
         {showTargeting && (
           <EventTargeting
