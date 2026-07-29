@@ -1,6 +1,6 @@
 // ─── GUEST DEDUPE (open-RSVP near-duplicates + admin merge) ───────────────────
 // Pure helpers backing the "Possible duplicates" panel. Every rule here mirrors
-// a rule in supabase/migrations/0011_guest_dedupe.sql — the database is the
+// a rule in supabase/migrations/0010_guest_dedupe.sql — the database is the
 // authority (the merge itself is one security-definer transaction), these
 // functions exist so the admin can be shown exactly what a merge will do before
 // confirming it, and so the rules are unit-testable without a live DB.

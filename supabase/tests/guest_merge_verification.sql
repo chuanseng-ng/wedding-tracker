@@ -1,4 +1,5 @@
--- Manual verification for guest dedupe + merge (0011_guest_dedupe.sql).
+-- Manual verification for guest dedupe + merge (0010_guest_dedupe.sql; the
+-- app.suppress_rsvp_email guard it relies on lives in 0007_email_automation.sql).
 --
 -- There is no automated DB test harness in CI (all Vitest tests are pure unit
 -- tests), so run this by hand after applying migrations — in the Supabase SQL
@@ -291,8 +292,8 @@ rollback;
 -- Note: whether net.http_post is actually skipped can only be observed on a
 -- deployment with the vault secrets set (rsvp_email_webhook_url / _secret). On a
 -- stock local stack those are absent and the webhook no-ops regardless, so this
--- block verifies the scoping, and the skip itself is verified by reading
--- notify_rsvp_status_change in 0011.
+-- block verifies the scoping, and the skip itself is asserted against the
+-- INSTALLED function below.
 begin;
 do $$
 begin
@@ -308,4 +309,31 @@ begin
     'SECURITY REGRESSION: suppression flag leaked past its transaction — '
     'genuine RSVP confirmation emails would stop sending';
   raise notice 'BLOCK 5 PASSED — email suppression is transaction-local';
+end $$;
+
+-- ── BLOCK 6: the installed trigger function actually honours the flag ────────
+-- Setting the flag is only half the contract; notify_rsvp_status_change has to
+-- read it. That function lives in the OPTIONAL 0007_email_automation.sql, which
+-- deployers apply out of numeric order — it used to be defined a second time in
+-- the dedupe migration, so applying 0007 last silently reverted the guard and
+-- merges emailed guests a confirmation they never asked for. 0007 is now the
+-- single definition; this assert is what stops the duplicate coming back.
+--
+-- Skipped cleanly on deployments that opted out of 0007 (no function, no
+-- trigger, no emails at all).
+do $$
+begin
+  if to_regprocedure('public.notify_rsvp_status_change()') is null then
+    raise notice 'BLOCK 6 SKIPPED — 0007_email_automation.sql not applied here';
+    return;
+  end if;
+
+  assert pg_get_functiondef('public.notify_rsvp_status_change()'::regprocedure)
+         like '%app.suppress_rsvp_email%',
+    'REGRESSION: the installed notify_rsvp_status_change has no '
+    'app.suppress_rsvp_email guard — an administrative merge_guests will email '
+    'the canonical guest a confirmation they never triggered. Re-apply '
+    '0007_email_automation.sql (it carries the guard as the single definition).';
+
+  raise notice 'BLOCK 6 PASSED — installed trigger function honours the guard';
 end $$;

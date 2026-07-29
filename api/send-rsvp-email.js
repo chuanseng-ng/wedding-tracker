@@ -3,6 +3,7 @@ import { buildIcs } from "./_lib/ics.js";
 import { sendEmail, getFromAddress, missingEmailEnvVars } from "./_lib/emailProvider.js";
 import { escapeHtml, sanitizeSubject } from "./_lib/escapeHtml.js";
 import { secureCompare } from "./_lib/secureCompare.js";
+import { coupleName } from "../src/lib/coupleName.js";
 
 function toTitleCase(str) {
   return str.replace(/\w\S*/g, (w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
@@ -178,14 +179,25 @@ export default async function handler(req, res) {
   if (error || !guest) return res.status(404).json({ error: "guest not found" });
   if (!guest.email) return res.status(200).json({ skipped: "no email on file" });
 
-  const { data: wedding } = await supabase
+  // maybeSingle (not single): zero rows is a legitimate "not set up yet" state,
+  // not an error. That keeps `weddingError` meaning a genuine query failure.
+  const { data: wedding, error: weddingError } = await supabase
     .from("weddings")
-    .select("bride_name, groom_name, hero_image_url, wedding_date, ceremony_time, dinner_time, venue_name, venue_address")
+    .select("bride_name, groom_name, name_order, hero_image_url, wedding_date, ceremony_time, dinner_time, venue_name, venue_address")
     .limit(1)
-    .single();
+    .maybeSingle();
+  // A query failure (e.g. migrations not applied, so name_order doesn't exist)
+  // must NOT be reported as "not configured" — a 200 there would silently stop
+  // every confirmation email and hide the real cause.
+  if (weddingError) {
+    console.error("[send-rsvp-email] wedding lookup failed:", weddingError.message || weddingError);
+    return res.status(500).json({ error: "could not load wedding config" });
+  }
   if (!wedding) return res.status(200).json({ skipped: "wedding not configured" });
 
-  const coupleNames = `${wedding.bride_name} & ${wedding.groom_name}`;
+  // Fallback guards the from-name and subject line against a wedding row saved
+  // with blank names (some providers reject an empty display name).
+  const coupleNames = coupleName(wedding, { fallback: "Our Wedding" });
   const guestName = toTitleCase(guest.name);
   const heroImageUrl = wedding.hero_image_url || "";
 

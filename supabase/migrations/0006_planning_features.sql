@@ -210,6 +210,7 @@ revoke all on function public.upsert_runsheet(jsonb, boolean) from public, anon;
 grant execute on function public.upsert_runsheet(jsonb, boolean) to authenticated;
 
 -- ── 6. get_public_runsheet — public /runsheet/:slug page ──────────────────────
+-- The runsheet header prints the couple names, so it needs the order too.
 
 drop function if exists public.get_public_runsheet(text);
 
@@ -220,7 +221,8 @@ returns table (
   wedding_date          date,
   venue_name            text,
   runsheet              jsonb,
-  is_runsheet_published boolean
+  is_runsheet_published boolean,
+  name_order            text
 )
 language sql
 security definer
@@ -232,7 +234,8 @@ as $$
     wedding_date,
     coalesce(venue_name, ''),
     coalesce(runsheet, '[]'::jsonb),
-    coalesce(is_runsheet_published, false)
+    coalesce(is_runsheet_published, false),
+    coalesce(name_order, 'bride_first')
   from public.weddings
   where slug = p_slug
     and coalesce(is_runsheet_published, false) = true

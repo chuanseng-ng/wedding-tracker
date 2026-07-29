@@ -19,6 +19,7 @@ import {
 import { cleanDueDate, cleanNotes } from "../lib/validation.js";
 import { localDateISO } from "../lib/budgetUtils.js";
 import { toChecklistCSV } from "../lib/csv.js";
+import { coupleName } from "../lib/coupleName.js";
 
 const styles = `
   .checklist-tab { display: flex; flex-direction: column; gap: 16px; }
@@ -271,9 +272,8 @@ export default function ChecklistTab({ wedding, onSave, isCouple }) {
   // Same Blob-download idiom as AdminApp's guest export; the checklist always
   // exports in full, ignoring the category filter.
   const exportChecklistCSV = useCallback(() => {
-    const prefix = wedding?.bride_name && wedding?.groom_name
-      ? `${wedding.bride_name}-${wedding.groom_name}`.toLowerCase().replace(/\s+/g, "-")
-      : "wedding";
+    const prefix = coupleName(wedding, { sep: "-", fallback: "wedding" })
+      .toLowerCase().replace(/\s+/g, "-");
     const blob = new Blob([toChecklistCSV(items, wedding?.wedding_date || null)], { type: "text/csv" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);

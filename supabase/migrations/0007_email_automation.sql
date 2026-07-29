@@ -38,6 +38,14 @@ create extension if not exists pg_net;
 -- distinguish a first-time RSVP (pending → confirmed/declined) from a genuine
 -- change of mind (confirmed ↔ declined) and only send host notifications for
 -- the latter.
+--
+-- The `app.suppress_rsvp_email` guard below is LOAD-BEARING — do not remove it.
+-- merge_guests (0010_guest_dedupe.sql) is its only setter: an administrative
+-- merge can move the canonical guest from pending to confirmed, which would
+-- otherwise email that guest a confirmation they never asked for. Because this
+-- file is optional and applied out of numeric order (see the box above), the
+-- guard has to live HERE, in the single definition of the function — a copy in
+-- 0010 would be silently reverted the moment a deployer finally applies 0007.
 
 create or replace function public.notify_rsvp_status_change()
 returns trigger
@@ -49,6 +57,14 @@ declare
   v_url    text;
   v_secret text;
 begin
+  -- Set transaction-locally by merge_guests (0010_guest_dedupe.sql): an
+  -- administrative merge must not look like the guest changing their own RSVP.
+  -- current_setting(.., true) returns null rather than raising when the setting
+  -- was never set.
+  if coalesce(current_setting('app.suppress_rsvp_email', true), '') = 'on' then
+    return new;
+  end if;
+
   if new.rsvp_status is distinct from old.rsvp_status
      and new.rsvp_status in ('confirmed', 'declined')
      and new.email != '' then

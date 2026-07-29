@@ -51,6 +51,11 @@ describe("buildIcsDataUrl (RFC 5545 compliance)", () => {
     expect(ics).toContain("SUMMARY:Mei & Wei's Wedding");
   });
 
+  it("honours the couple's chosen name order", () => {
+    const ics = decodeIcs(buildIcsDataUrl({ ...WEDDING, name_order: "groom_first" }));
+    expect(ics).toContain("SUMMARY:Wei & Mei's Wedding");
+  });
+
   it("uses the provided localized fallback when names are missing", () => {
     const ics = decodeIcs(
       buildIcsDataUrl({ id: "x", wedding_date: "2026-08-08" }, "婚禮")

@@ -8,6 +8,7 @@ import { localizeEvents } from "../lib/eventLocalize.js";
 import { sanitizeThemeTokens, isCompleteThemeTokens, themeTokenStyle } from "../lib/themeTokens.js";
 import { normalizeSectionPhotos } from "../lib/sectionPhotos.js";
 import { normalizeFocalPoint } from "../lib/heroFocalPoint.js";
+import { coupleName, coupleParts } from "../lib/coupleName.js";
 import LanguageSwitcher from "../i18n/LanguageSwitcher.jsx";
 import PhotowallSection from "./PhotowallSection.jsx";
 import { Coffee, Diamond, ForkKnife, Wine, Camera, Confetti, CalendarBlank, MapPin, Train, Car, PersonSimpleWalk } from "@phosphor-icons/react";
@@ -43,6 +44,7 @@ const PHOTOWALL_ENABLED = import.meta.env.VITE_ENABLE_PHOTOWALL !== "false";
 const DEMO_WEDDING = {
   bride_name: "Siew Yong",
   groom_name: "Wei Ming",
+  name_order: "bride_first",
   wedding_date: "2026-12-27",
   venue_name: "The Grand Ballroom",
   venue_address: "123 Orchard Road, Singapore 238858",
@@ -490,10 +492,11 @@ export default function WeddingPage() {
   }, [slug]);
 
   useEffect(() => {
-    if (lw?.bride_name && lw?.groom_name) {
-      document.title = t("wedding.docTitle", { bride: lw.bride_name, groom: lw.groom_name });
+    const couple = coupleName(lw);
+    if (couple) {
+      document.title = t("wedding.docTitle", { couple });
     }
-  }, [lw?.bride_name, lw?.groom_name, t]);
+  }, [lw, t]);
 
   useEffect(() => {
     if (!wedding) return;
@@ -543,7 +546,7 @@ export default function WeddingPage() {
     );
   }
 
-  const { bride_name, groom_name, wedding_date, venue_name, venue_address,
+  const { wedding_date, venue_name, venue_address,
           ceremony_time, dinner_time, tea_ceremony_time, love_story, dress_code,
           hero_image_url, rsvp_deadline, is_published, getting_there,
           theme: pageTheme = "minimal", theme_tokens } = lw;
@@ -583,7 +586,10 @@ export default function WeddingPage() {
   const effectiveTheme = pageTheme === "custom" ? (hasCustom ? "custom" : "minimal") : pageTheme;
   const customStyle = hasCustom ? themeTokenStyle(customTokens) : undefined;
 
-  const coupleNames = `${bride_name} & ${groom_name}`;
+  // Display order is the couple's choice (weddings.name_order) — never join the
+  // two names by hand.
+  const coupleNames = coupleName(lw);
+  const [firstName, secondName] = coupleParts(lw);
 
   return (
     <>
@@ -635,8 +641,8 @@ export default function WeddingPage() {
           <div className="wp-hero-content">
             <div className="wp-couple">
               <span className="wp-couple-amp">♡</span>
-              {bride_name}
-              <br />& {groom_name}
+              {firstName}
+              <br />& {secondName}
             </div>
 
             {wedding_date && (

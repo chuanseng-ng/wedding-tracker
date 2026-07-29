@@ -1,3 +1,5 @@
+import { coupleName } from "../lib/coupleName.js";
+
 // Build an RFC 5545-compliant all-day .ics invite for the wedding day.
 // `fallbackSummary` is passed in (localized) by the caller since this is a pure
 // helper with no `t` in scope.
@@ -18,9 +20,8 @@ export function buildIcsDataUrl(wedding, fallbackSummary = "Wedding") {
     `${now.getUTCFullYear()}${pad(now.getUTCMonth() + 1)}${pad(now.getUTCDate())}` +
     `T${pad(now.getUTCHours())}${pad(now.getUTCMinutes())}${pad(now.getUTCSeconds())}Z`;
   const uid = `${wedding.id || wedding.slug || dateStr}-wedding@weddingtracker`;
-  const summary = wedding.bride_name && wedding.groom_name
-    ? `${wedding.bride_name} & ${wedding.groom_name}'s Wedding`
-    : fallbackSummary;
+  const couple = coupleName(wedding);
+  const summary = couple ? `${couple}'s Wedding` : fallbackSummary;
   const location = [wedding.venue_name, wedding.venue_address].filter(Boolean).join(", ");
   const ics = [
     "BEGIN:VCALENDAR",

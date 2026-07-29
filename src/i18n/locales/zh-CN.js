@@ -8,11 +8,11 @@ export default {
   "common.language": "语言",
 
   // ── Wedding page ────────────────────────────────────────────────────────
-  "wedding.docTitle": "{bride} & {groom} · 婚礼",
+  "wedding.docTitle": "{couple} · 婚礼",
   "wedding.notFound.title": "找不到页面",
   "wedding.notFound.body": "这个婚礼页面不存在，或尚未设置。",
   "wedding.previewBanner": "预览 — 此页面尚未发布，只有你能看到这个链接。",
-  "wedding.inviteTag": "✦ {groom} & {bride} 诚挚邀请您 ✦",
+  "wedding.inviteTag": "✦ {couple} 诚挚邀请您 ✦",
   "wedding.inviteTagFallback": "— — — 诚挚邀请您 — — —",
   "wedding.rsvpNow": "立即回复",
   "wedding.loading": "正在加载婚礼页面",
@@ -83,7 +83,7 @@ export default {
   "wedding.funq.firstdate": "第一次约会发生了什么？",
 
   // ── RSVP page ───────────────────────────────────────────────────────────
-  "rsvp.docTitle": "婚礼回复 · {bride} & {groom}",
+  "rsvp.docTitle": "婚礼回复 · {couple}",
   "rsvp.invited": "诚挚邀请您",
   "rsvp.eyebrow": "婚礼回复",
   "rsvp.loading": "正在加载您的资料…",

@@ -3,7 +3,9 @@
 --
 -- Migration map (post-consolidation): app_config + is_helper() live in
 -- 0001_core.sql; the role-aware RLS policies + check-in/projection RPCs in
--- 0005_roles_security.sql; the gated config-write RPCs in
+-- 0005_roles_security.sql, which also holds the helper-safe
+-- get_wedding_floorplans projection; the couple-only weddings_select policy in
+-- 0003_weddings_page.sql; the gated config-write RPCs in
 -- 0003_weddings_page.sql (upsert_wedding_page), 0004_smart_rsvp.sql
 -- (upsert_wedding_config), and 0006_planning_features.sql (budget / runsheet /
 -- checklist RPCs).

@@ -10,6 +10,7 @@ import { buildEventResponses, declineAllResponses, hydrateEventState, primaryAns
 import { visibleEventsFor } from "../lib/eventVisibility.js";
 import { MAX_PIN, cleanPin, isOpenMode, openRsvpErrorKey, registerResultErrorKey } from "../lib/openRsvp.js";
 import { sanitizeThemeTokens, isCompleteThemeTokens, themeTokenStyle } from "../lib/themeTokens.js";
+import { coupleName, partyOrder } from "../lib/coupleName.js";
 import { buildIcsDataUrl } from "./buildIcs.js";
 import LanguageSwitcher from "../i18n/LanguageSwitcher.jsx";
 import { Heart, EnvelopeSimple } from "@phosphor-icons/react";
@@ -269,9 +270,7 @@ function ConfirmationView({ name, attending, wedding }) {
   const { t, locale } = useLocale();
   const dtLocale = locale === "zh-TW" ? "zh-TW" : "en-GB";
   const lw = localizeWedding(wedding, locale);
-  const couple = lw?.bride_name && lw?.groom_name
-    ? `${lw.bride_name} & ${lw.groom_name}`
-    : t("rsvp.confirm.coupleFallback");
+  const couple = coupleName(lw, { fallback: t("rsvp.confirm.coupleFallback") });
   const date = wedding?.wedding_date ? formatDate(wedding.wedding_date, dtLocale) : null;
   const venue = wedding?.venue_name || null;
   const icsUrl = attending ? buildIcsDataUrl(wedding, t("rsvp.confirm.eventTitleFallback")) : null;
@@ -433,10 +432,11 @@ export default function RsvpPage() {
 
   // Keep the document title in sync with the couple + active locale.
   useEffect(() => {
-    if (w?.bride_name && w?.groom_name) {
-      document.title = t("rsvp.docTitle", { bride: w.bride_name, groom: w.groom_name });
+    const couple = coupleName(w);
+    if (couple) {
+      document.title = t("rsvp.docTitle", { couple });
     }
-  }, [w?.bride_name, w?.groom_name, t]);
+  }, [w, t]);
 
   // Hydrate the form from the active token — both the "Update RSVP" deep link and
   // a guest picked from the name search. Also loads the guest's invited events and
@@ -627,9 +627,7 @@ export default function RsvpPage() {
         <div className="rsvp-card">
           <div className="rsvp-logo">
             <span className="rsvp-logo-heart">♡</span>
-            {w?.bride_name && w?.groom_name
-              ? `${w.bride_name} & ${w.groom_name}`
-              : t("rsvp.invited")}
+            {coupleName(w, { fallback: t("rsvp.invited") })}
           </div>
           {wedding?.wedding_date || wedding?.venue_name ? (
             <div className="rsvp-event-info">
@@ -838,16 +836,16 @@ export default function RsvpPage() {
                 <div className="rsvp-field">
                   <span className="rsvp-label">{t("rsvp.closerTo")}</span>
                   <div className="attend-btns">
-                    <button type="button"
-                      className={`attend-btn yes ${closerTo === "bride" ? "active" : ""}`}
-                      onClick={() => setCloserTo(closerTo === "bride" ? "" : "bride")}>
-                      {w?.bride_name || t("rsvp.side.brideFallback")}
-                    </button>
-                    <button type="button"
-                      className={`attend-btn yes ${closerTo === "groom" ? "active" : ""}`}
-                      onClick={() => setCloserTo(closerTo === "groom" ? "" : "groom")}>
-                      {w?.groom_name || t("rsvp.side.groomFallback")}
-                    </button>
+                    {/* Side buttons follow the couple's chosen name order. The
+                        stored `closerTo` value stays "bride"/"groom" either way. */}
+                    {partyOrder(w).map((side) => (
+                      <button key={side} type="button"
+                        className={`attend-btn yes ${closerTo === side ? "active" : ""}`}
+                        onClick={() => setCloserTo(closerTo === side ? "" : side)}>
+                        {(side === "bride" ? w?.bride_name : w?.groom_name)
+                          || t(`rsvp.side.${side}Fallback`)}
+                      </button>
+                    ))}
                   </div>
                 </div>
               )}

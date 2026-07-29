@@ -31,18 +31,56 @@ Open the **SQL Editor** in your Supabase dashboard and run the migrations **in o
 |---|---|
 | [`0001_core.sql`](../supabase/migrations/0001_core.sql) | `guests` + `submissions` tables, `set_updated_at` trigger, reusable lucky-draw pool (lowest-free `assign_draw_number` + `release_draw_number`), private `receipts` storage bucket, role plumbing (`app_config` + `is_helper()`) |
 | [`0002_rsvp_seating.sql`](../supabase/migrations/0002_rsvp_seating.sql) | `tables` table; all RSVP columns on guests (`rsvp_status`, `meal_choice`, `email`, etc.); relationship taxonomy columns; RSVP RPCs (`submit_rsvp`, fuzzy `submit_rsvp_by_name`, `find_guest_by_name`); reminder-cron indexes |
-| [`0003_weddings_page.sql`](../supabase/migrations/0003_weddings_page.sql) | Singleton `weddings` table with **all** columns (page content, AI theme tokens, section photos, hero focal point, budget/runsheet/checklist storage, extra notice, open-RSVP + photowall flags/pins, floorplans); `wedding-photos` bucket with couple-only write policies; `upsert_wedding_page` / `get_public_wedding` RPCs |
+| [`0003_weddings_page.sql`](../supabase/migrations/0003_weddings_page.sql) | Singleton `weddings` table with **all** columns (page content, AI theme tokens, section photos, hero focal point, budget/runsheet/checklist storage, extra notice, open-RSVP + photowall flags/pins, floorplans, `name_order`); couple-only `SELECT` policy (the helper reads nothing off this row directly); `wedding-photos` bucket with couple-only write policies; `upsert_wedding_page` / `get_public_wedding` RPCs |
 | [`0004_smart_rsvp.sql`](../supabase/migrations/0004_smart_rsvp.sql) | Smart RSVP: `wedding_events` (incl. `audience_groups` targeting) + `guest_event_rsvps` tables, legacy-mirror trigger, `get_public_events` / `get_guest_by_rsvp_token` / `submit_rsvp_events`; final `get_wedding_config` / `upsert_wedding_config` |
-| [`0005_roles_security.sql`](../supabase/migrations/0005_roles_security.sql) | Couple/helper RLS split for `guests` / `tables` / `wedding_events` / `guest_event_rsvps` / `submissions` / `receipts`; `set_guest_checkin` + helper-safe `get_checkin_guests` projection (incl. `angbao_given`); helper-callable `set_guest_angbao_received`; read-only `get_wishes_guests` projection |
-| [`0006_planning_features.sql`](../supabase/migrations/0006_planning_features.sql) | `vendors` table + RLS; budget / runsheet / checklist / floorplans config RPCs (couple-gated); `checklist_reminder_log` table |
-| [`0007_email_automation.sql`](../supabase/migrations/0007_email_automation.sql) | `pg_net` extension; RSVP status-change webhook trigger (with `old_rsvp_status` for host change-of-mind notifications); `second_reminder_sent_at` column — **apply only after completing the email setup in step 5** |
+| [`0005_roles_security.sql`](../supabase/migrations/0005_roles_security.sql) | Couple/helper RLS split for `guests` / `tables` / `wedding_events` / `guest_event_rsvps` / `submissions` / `receipts`; `set_guest_checkin` + helper-safe `get_checkin_guests` projection (incl. `angbao_given`); helper-callable `set_guest_angbao_received`; read-only `get_wishes_guests` projection; helper-safe `get_wedding_floorplans` projection |
+| [`0006_planning_features.sql`](../supabase/migrations/0006_planning_features.sql) | `vendors` table + RLS; budget / runsheet / checklist / floorplans config RPCs (couple-gated); final `get_public_runsheet`; `checklist_reminder_log` table |
+| [`0007_email_automation.sql`](../supabase/migrations/0007_email_automation.sql) | `pg_net` extension; RSVP status-change webhook trigger (with `old_rsvp_status` for host change-of-mind notifications, and the `app.suppress_rsvp_email` merge-suppression guard); `second_reminder_sent_at` column — **apply only after completing the email setup in step 5**; safe to apply out of order |
 | [`0008_open_rsvp.sql`](../supabase/migrations/0008_open_rsvp.sql) | **Open RSVP** self-registration: `guests.self_registered` flag, `register_open_rsvp` RPC (PIN-gated), `open_rsvp_pin_attempts` rate-limit log, couple-only PIN readback (the `weddings` flag/pin columns live in `0003`) |
 | [`0009_photowall.sql`](../supabase/migrations/0009_photowall.sql) | **Guest photowall** (#138): `photowall_photos` metadata table (files live in Cloudflare R2 / Vercel Blob, not Supabase), `photowall_pin_attempts` rate-limit log, anon `get_photowall_photos` read RPC, service-role-only upload RPCs, couple-only PIN readback (the `weddings` flag/pin columns live in `0003`) |
-| [`0010_weddings_helper_read_hardening.sql`](../supabase/migrations/0010_weddings_helper_read_hardening.sql) | Closes the helper read gap on the singleton `weddings` row (couple-only `SELECT`); helper-safe `get_wedding_floorplans` projection |
-| [`0011_guest_dedupe.sql`](../supabase/migrations/0011_guest_dedupe.sql) | **Duplicate guest cleanup**: shared `normalize_guest_name` matching rule + trigram index, `guest_merges` audit table, `duplicate_dismissals`, couple-only `get_duplicate_candidates` / `dismiss_duplicate_pair` / `merge_guests`; adds an RSVP-email suppression guard to the `0007` webhook |
+| [`0010_guest_dedupe.sql`](../supabase/migrations/0010_guest_dedupe.sql) | **Duplicate guest cleanup**: shared `normalize_guest_name` matching rule + trigram index, `guest_merges` audit table, `duplicate_dismissals`, couple-only `get_duplicate_candidates` / `dismiss_duplicate_pair` / `merge_guests` (depends on `guests.self_registered` from `0008`) |
 
 All migrations are idempotent (`CREATE OR REPLACE`, `IF NOT EXISTS`) — safe to re-run,
 including against a database that already ran the pre-consolidation files.
+
+> **Supabase CLI users (existing deployments) — consolidation round 4 (July 2026):**
+> the three feature migrations `0010_weddings_helper_read_hardening`,
+> `0011_guest_dedupe` and `0012_couple_name_order` were folded back into the
+> domain files, taking the folder from 12 files to 10. Every object they created
+> now appears exactly once, in its final form:
+>
+> | Removed files | Consolidated into |
+> |---|---|
+> | `0010_weddings_helper_read_hardening` | couple-only `weddings_select` policy → `0003_weddings_page.sql`; `get_wedding_floorplans` → `0005_roles_security.sql` |
+> | `0011_guest_dedupe` | renumbered to **`0010_guest_dedupe.sql`** (it depends on `guests.self_registered` from `0008`, so it must stay after it); its RSVP-email suppression guard → `0007_email_automation.sql` |
+> | `0012_couple_name_order` | `name_order` column + `get_public_wedding` → `0003`; `get_wedding_config` + `upsert_wedding_config` → `0004`; `get_public_runsheet` → `0006` |
+>
+> **This round also fixes a real bug, and re-pushing is how you get the fix.**
+> `0007` is optional and applied *after* the numbered files, but it defined
+> `notify_rsvp_status_change` **without** the `app.suppress_rsvp_email` guard that
+> `0011` added. Applying `0007` last therefore silently reverted the guard, and
+> every guest merge that flipped the canonical guest from pending to confirmed
+> emailed that guest a confirmation they never asked for. `0007` now carries the
+> guard as the single definition, so it is safe to apply at any point.
+>
+> Reset **all** tracking rows once, then push. Deleting `0001`–`0009` too matters:
+> those files kept their version numbers but gained content in this round, so a
+> push that still lists them as applied would skip them:
+>
+> ```sql
+> -- Verify what you have first:  select * from supabase_migrations.schema_migrations;
+> delete from supabase_migrations.schema_migrations
+>   where version in (
+>     '0001','0002','0003','0004','0005','0006',
+>     '0007','0008','0009','0010','0011','0012'
+>   );
+> ```
+>
+> Then run `supabase db push` — it replays all 10 files, which are idempotent: a
+> fully up-to-date schema is unchanged apart from the `0007` guard being restored.
+
+Deployments that predate this round follow the round-2 note below as well — its
+cleanup list covers the `0008`–`0013` versions retired in July 2026.
 
 > **Supabase CLI users (existing deployments) — consolidation round 2 (July 2026):**
 > the six feature migrations `0008_extra_notice`, `0009_open_rsvp`,
@@ -75,9 +113,10 @@ including against a database that already ran the pre-consolidation files.
 >   );
 > ```
 >
-> Then run `supabase db push` — it replays all 9 files, which are idempotent:
-> a fully up-to-date schema is unchanged, and a partially-migrated one (e.g. a
-> deployment that never ran `0013_floorplans`) gets exactly the missing pieces.
+> Then run `supabase db push` — it replays all 10 current files, which are
+> idempotent: a fully up-to-date schema is unchanged, and a partially-migrated
+> one (e.g. a deployment that never ran `0013_floorplans`) gets exactly the
+> missing pieces.
 
 Deployments that predate the *first* consolidation (the original 19-file layout) follow the round-1 note below instead — its cleanup list covers the old `0001`–`0019` versions.
 
@@ -448,10 +487,11 @@ Priya Nair,2,,false,bride
 ### Before the wedding
 
 1. Fill in your wedding details in the **Wedding Setup tab** (couple names, date, venue, ceremony/dinner time) — do this first, since the RSVP confirmation email and calendar invite read from it
+   - **Name order.** Right under the two name fields, **Name order** picks whose name reads first — *Bride's name first* (the default) or *Groom's name first*. It applies everywhere the pair appears: the public wedding page and runsheet, the RSVP form, the confirmation and reminder emails, the calendar invite, Wishes Wrapped, CSV export filenames and the browser tab title. A preview under the dropdown shows the result before you save. Changing it never rewrites a wedding-page URL you've already saved — the order only shapes the *suggested* slug while that field is still empty. Requires the `0003`–`0006` migrations at their round-4 versions (`weddings.name_order` lives in `0003_weddings_page.sql`).
    - Optional: under **Wedding Page**, flip **Fun RSVP options** on to add two playful choices to the guest RSVP form — *"It's complicated 😅"* (how they know you) and *"😏 It's a secret"* (friend type). Off by default.
    - Optional: under **Wedding Page → Note to Guests**, add **Parking**, **Smoking**, and/or a general **Extra Notice** — each shows on the RSVP form (to attending guests) only if filled, and each is translatable. Attending guests are also asked *"Would you like to give a speech?"*; the RSVP tab flags volunteers with a 🎤.
    - Optional: **Open RSVP** (Wedding Setup) lets guests who aren't on your list register themselves — they type their name free-text and enter the **RSVP PIN** you set (required; share it on the invitation). The PIN is checked server-side and the form locks temporarily after too many wrong attempts. Self-registered guests are flagged in the RSVP tab so you can vet them after the deadline.
-     - **Possible duplicates.** Because open RSVP takes a free-text name, someone already on your list can register a second time under a slightly different spelling ("Wei-Ming Tan" vs "Wei Ming Tan"). When that happens, a **⚠️ Possible duplicate guests** panel appears at the top of the RSVP tab (it stays hidden when there's nothing to review). Each pair offers **Merge…** — which shows exactly what will change before you confirm — or **Not a duplicate**, which stops that pair being offered again. Merging keeps the guest already on your list and fills in only the blanks from the self-registered row; per-event answers take whichever was answered most recently, plus-ones move over, and check-in / ang-bao state is never cleared. The deleted row is copied into a `guest_merges` table first, so a mistaken merge can be recovered from the database by hand. Requires the `0011_guest_dedupe` migration.
+     - **Possible duplicates.** Because open RSVP takes a free-text name, someone already on your list can register a second time under a slightly different spelling ("Wei-Ming Tan" vs "Wei Ming Tan"). When that happens, a **⚠️ Possible duplicate guests** panel appears at the top of the RSVP tab (it stays hidden when there's nothing to review). Each pair offers **Merge…** — which shows exactly what will change before you confirm — or **Not a duplicate**, which stops that pair being offered again. Merging keeps the guest already on your list and fills in only the blanks from the self-registered row; per-event answers take whichever was answered most recently, plus-ones move over, and check-in / ang-bao state is never cleared. The deleted row is copied into a `guest_merges` table first, so a mistaken merge can be recovered from the database by hand. Requires the `0010_guest_dedupe` migration.
    - If you use **smart per-event RSVP**, the form starts with a single *"Will you be attending?"* — a "No" declines every invited event at once. Each event's editor has **Show to** checkboxes (family / friends / colleagues / other; none checked = everyone) to hide irrelevant events from the wrong crowd — note this only declutters the form, it is not access control (see `SECURITY.md`).
    - The **Runsheet tab** builds the day's programme (times show AM/PM); a **Gantt timeline** view visualises each item's start time and duration, on both the admin tab and the published public `/runsheet/:slug` page.
    - Attending guests can bring up to **6 additional guests** — each becomes its own guest entry (seatable and checkable-in independently). In the **RSVP tab** these appear as rows labelled *"↳ additional guest of …"*; the confirmed **headcount** stat counts every body, while the confirmed/pending counts track invitations.
