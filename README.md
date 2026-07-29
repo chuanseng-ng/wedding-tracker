@@ -116,3 +116,14 @@ npm run build     # production build → dist/
 npm run preview   # serve dist/ locally
 vercel dev        # test serverless functions locally (requires Vercel CLI + .env)
 ```
+
+There is also a `Makefile` wrapping these plus the Supabase and demo-mode commands —
+run `make help` for the full list. It needs a POSIX shell, so use Git Bash on Windows.
+
+```bash
+make setup        # npm ci + create .env from .env.example (never overwrites an existing .env)
+make dev          # Vite dev server            (PORT=5173 to override)
+make ci           # lint → test → build → audit, in CI's order — run before committing
+make smoke        # dev server forced into demo mode, no Supabase needed
+make db-reset     # re-run every migration + seed.sql against the local stack
+```

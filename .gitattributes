@@ -1,0 +1,7 @@
+# Keep the Makefile LF in the working tree even where core.autocrlf=true.
+# GNU Make on Windows tolerates CRLF, but Linux make does not — it passes the
+# trailing \r straight to the shell ("$'\r': command not found"), which bites
+# anyone driving this repo from WSL against a Windows checkout.
+#
+# Deliberately narrow: no repo-wide rules here, so nothing else renormalises.
+Makefile text eol=lf
