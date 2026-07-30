@@ -5,6 +5,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [2026-07-30] — Multi-select guest deletion
+
+### Added
+
+- **Tick-boxes on the RSVP tab's guest list, and one confirmed action to delete them all** ([#178](https://github.com/shangweisong/wedding-tracker/issues/178)). Clearing a long guest list one row at a time was slow. Each row now has a checkbox, **Select all** covers the rows in the *current* filter (so search / status / party narrow the selection first), and a bar above the list shows the count with **Delete selected** and **Clear**. The selection is derived through `pruneSelection` on every render, so the 5s poll dropping a row out from under a live selection can't leave a stale id behind to inflate the count or fire a no-op delete.
+- Deletion accounts for plus-ones. `guests.primary_guest_id` is `on delete cascade`, so removing a primary silently removes the party they registered. [`src/lib/guestSelection.js`](src/lib/guestSelection.js) `resolveDeletion()` splits a selection into the rows to actually call `sb.delete` on (a selected plus-one whose primary is also going needs no call of its own) and every row that will disappear — the second number is what the confirmation modal shows, so "Delete 3" never quietly removes 5. The modal spells out that **Undo restores the guests you picked, not their cascade-deleted plus-ones** — always true of the single-guest undo, now said out loud.
+
+### Changed
+
+- **A bulk delete always demands the typed `DELETE`**, regardless of the *Require typing DELETE* preference (the toggle is disabled and labelled "always on for multiple guests" in that case). One stray click shouldn't clear a dozen guests. The single-guest flow is unchanged and still governed by the preference.
+- `deleteGuest` / `undoDelete` in `AdminApp.jsx` became `deleteGuests(list)` / `undoDeletes(list)` over a shared `restoreGuest`, and `pendingDelete` became the array `pendingDeletes` — one confirmation modal now serves both the D-Day single-row delete and the RSVP tab's multi-select. Deletes are issued with `Promise.allSettled`; if any rejects, the existing `syncFail` refetch repaints the truth and no Undo is offered for a delete that may not have happened.
+
+---
+
 ## [2026-07-29] — White blank page: react / react-dom version mismatch
 
 ### Added
