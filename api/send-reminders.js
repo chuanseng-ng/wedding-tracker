@@ -4,6 +4,7 @@ import { escapeHtml } from "./_lib/escapeHtml.js";
 import { secureCompare } from "./_lib/secureCompare.js";
 import { selectDueReminders, computeDueDate } from "../src/lib/checklistUtils.js";
 import { localDateISO } from "../src/lib/budgetUtils.js";
+import { isRsvpLocked } from "../src/lib/rsvpDeadline.js";
 import { coupleName } from "../src/lib/coupleName.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -79,7 +80,7 @@ export default async function handler(req, res) {
   // not an error. That keeps `weddingError` meaning a genuine query failure.
   const { data: wedding, error: weddingError } = await supabase
     .from("weddings")
-    .select("bride_name, groom_name, name_order, wedding_date, venue_name, venue_address, dress_code, tea_ceremony_time, ceremony_time, dinner_time, hero_image_url, getting_there, slug, is_published, checklist")
+    .select("bride_name, groom_name, name_order, wedding_date, venue_name, venue_address, dress_code, tea_ceremony_time, ceremony_time, dinner_time, hero_image_url, getting_there, slug, is_published, checklist, rsvp_deadline, lock_rsvp_after_deadline, wedding_timezone")
     .limit(1)
     .maybeSingle();
   // A query failure (e.g. migrations not applied, so name_order doesn't exist)
@@ -160,6 +161,7 @@ async function sendGuestReminders({ supabase, wedding, days, fromAddress, couple
   const weddingPageUrl = siteUrl && wedding.slug && wedding.is_published
     ? `${siteUrl}/wedding/${wedding.slug}`
     : "";
+  const rsvpClosed = isRsvpLocked(wedding);
 
   const firstReminderIds = [];
   const secondReminderIds = [];
@@ -172,7 +174,14 @@ async function sendGuestReminders({ supabase, wedding, days, fromAddress, couple
 
     if (!isFirstReminder && !isSecondReminder) continue;
 
-    const rsvpUrl = siteUrl && guest.rsvp_token ? `${siteUrl}/rsvp?token=${guest.rsvp_token}` : "";
+    // #179: these go to CONFIRMED guests (logistics, not RSVP chasing), so the
+    // mail still sends — but once the deadline lock is past, /rsvp answers this
+    // token with a closed notice, so drop the "Changed your plans?" button
+    // rather than link guests to a dead end. Blank rsvpUrl is the signal
+    // secondReminderHtml already keys off.
+    const rsvpUrl = !rsvpClosed && siteUrl && guest.rsvp_token
+      ? `${siteUrl}/rsvp?token=${guest.rsvp_token}`
+      : "";
 
     const subject = isFirstReminder
       ? `90 days to go — we can't wait to celebrate with you!`

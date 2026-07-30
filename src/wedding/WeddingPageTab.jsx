@@ -5,6 +5,7 @@ import { isCompleteThemeTokens } from "../lib/themeTokens.js";
 import { SECTION_PHOTO_SLOTS, MAX_PHOTOS_PER_SLOT, normalizeSectionPhotos } from "../lib/sectionPhotos.js";
 import { FOCAL_POINTS, normalizeFocalPoint } from "../lib/heroFocalPoint.js";
 import { coupleParts, partyOrder } from "../lib/coupleName.js";
+import { DEFAULT_TIMEZONE, TIMEZONE_OPTIONS } from "../lib/rsvpDeadline.js";
 
 // Read a File as a base64 string (without the data: URL prefix) for the vision API.
 function fileToBase64(file) {
@@ -301,6 +302,8 @@ export default function WeddingPageTab({ wedding, onSave, showToast }) {
   const [heroUrl, setHeroUrl]      = useState("");
   const [heroFocalPoint, setHeroFocalPoint] = useState("center");
   const [rsvpDeadline, setRsvpDeadline] = useState("");
+  const [lockAfterDeadline, setLockAfterDeadline] = useState(false);
+  const [weddingTimezone, setWeddingTimezone] = useState(DEFAULT_TIMEZONE);
   const [mealOptions, setMealOptions]   = useState("");
   const [gettingThere, setGettingThere] = useState("");
   const [smokingNotice, setSmokingNotice] = useState("");
@@ -337,6 +340,8 @@ export default function WeddingPageTab({ wedding, onSave, showToast }) {
     setHeroUrl(wedding.hero_image_url || "");
     setHeroFocalPoint(normalizeFocalPoint(wedding.hero_focal_point));
     setRsvpDeadline(wedding.rsvp_deadline || "");
+    setLockAfterDeadline(!!wedding.lock_rsvp_after_deadline);
+    setWeddingTimezone(wedding.wedding_timezone || DEFAULT_TIMEZONE);
     setMealOptions(wedding.meal_options || "");
     setGettingThere(wedding.getting_there || "");
     setSmokingNotice(wedding.smoking_notice || "");
@@ -631,6 +636,10 @@ export default function WeddingPageTab({ wedding, onSave, showToast }) {
       hero_focal_point: normalizeFocalPoint(heroFocalPoint),
       fun_qa:          funQa,
       rsvp_deadline:   rsvpDeadline || null,
+      // Locking with no deadline set would be a no-op server-side; keep the
+      // stored flag honest so the toggle reads back the way it behaves.
+      lock_rsvp_after_deadline: rsvpDeadline ? lockAfterDeadline : false,
+      wedding_timezone: weddingTimezone || DEFAULT_TIMEZONE,
       is_published:    isPublished,
       meal_options:    mealOptions.trim(),
       getting_there:   gettingThere.trim(),
@@ -684,6 +693,52 @@ export default function WeddingPageTab({ wedding, onSave, showToast }) {
             <label className="wpt-label">RSVP Deadline <span className="wpt-label-opt">(optional)</span></label>
             <input className="wpt-input" type="date" value={rsvpDeadline} onChange={(e) => setRsvpDeadline(e.target.value)} />
           </div>
+
+          {/* #179: without this the deadline is only a printed suggestion — guests
+              can still change their answer after seating is arranged. */}
+          {rsvpDeadline && (
+            <div className="wpt-field">
+              <div className="wpt-publish-row">
+                <div className="wpt-publish-info">
+                  <div className="wpt-publish-title">
+                    Close RSVP after the deadline {lockAfterDeadline ? "on" : "off"}
+                  </div>
+                  <div className="wpt-publish-desc">
+                    {lockAfterDeadline
+                      ? "From the day after the deadline, guests see a notice asking them to contact you instead of the form. You can still edit any answer from the Guest List."
+                      : "Guests can keep submitting and changing their RSVP after the deadline."}
+                  </div>
+                </div>
+                <label className="wpt-toggle">
+                  <input
+                    type="checkbox"
+                    checked={lockAfterDeadline}
+                    onChange={(e) => setLockAfterDeadline(e.target.checked)}
+                  />
+                  <div className="wpt-toggle-track" />
+                  <div className="wpt-toggle-thumb" />
+                </label>
+              </div>
+
+              {lockAfterDeadline && (
+                <div style={{ marginTop: 14 }}>
+                  <label className="wpt-label">
+                    Deadline Timezone
+                    <span className="wpt-label-opt">(decides when the deadline day ends)</span>
+                  </label>
+                  <select
+                    className="wpt-select"
+                    value={weddingTimezone}
+                    onChange={(e) => setWeddingTimezone(e.target.value)}
+                  >
+                    {TIMEZONE_OPTIONS.map((tz) => (
+                      <option key={tz} value={tz}>{tz}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="wpt-field">
             <label className="wpt-label">Meal Options <span className="wpt-label-opt">(comma-separated, shown on RSVP form)</span></label>

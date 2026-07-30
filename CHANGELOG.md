@@ -5,6 +5,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [2026-07-31] — RSVP closes after the deadline
+
+### Added
+
+- **An opt-in lock that actually enforces the RSVP deadline** ([#179](https://github.com/shangweisong/wedding-tracker/issues/179)). `weddings.rsvp_deadline` has been decorative since it was added: the public page printed "RSVP by 31 Oct" and nothing stopped a guest submitting — or quietly *changing* — an answer afterwards, so seating and catering could shift under the couple after they had been finalised. **Close RSVP after the deadline** now sits directly under the deadline date in the Wedding Page tab (it only appears once a deadline is set). With it on, the day after the deadline the public form is replaced by a notice asking guests to contact the couple, and all three anon-facing write RPCs — `submit_rsvp`, `submit_rsvp_events` and `register_open_rsvp` — refuse with `rsvp closed`. Enforcement is in the database, not just the UI: the public anon key can call those RPCs directly. Default off, so every existing deployment behaves exactly as before.
+- **`weddings.wedding_timezone`** (IANA, default `Asia/Singapore`), picked beside the toggle. `rsvp_deadline` is a bare `date`, so "the deadline has passed" is a calendar question — resolving it against the server's UTC clock would lock a UTC-5 couple's guests out five hours early on the deadline day. The deadline day itself is inclusive: locking begins at local midnight after it. New pure helper [`src/lib/rsvpDeadline.js`](src/lib/rsvpDeadline.js) mirrors the SQL, and `public.is_rsvp_locked()` fails open (no row, no deadline, or the flag off ⇒ open) so a misconfigured deployment can never silently shut its own form.
+
+### Changed
+
+- `get_wedding_config` appends `lock_rsvp_after_deadline`, `wedding_timezone` and a server-**computed** `rsvp_locked`. The form renders from `rsvp_locked` rather than doing its own date math, so the page and the RPC that will accept or refuse the submit cannot disagree about whether RSVP is open. Clients read this row positionally, so the three columns are append-only.
+- Confirmation, decline and 30-day reminder emails drop their **Update RSVP** button while the lock is active rather than linking guests to a form that will refuse them (`api/send-rsvp-email.js`, `api/send-reminders.js`). The reminders themselves still send — they go to *confirmed* guests and carry venue and timing details, not RSVP chase-ups.
+- Couple and helper edits to guest RSVPs are untouched: they write to the `guests` table directly and never pass through the guarded RPCs.
+
+---
+
 ## [2026-07-30] — Multi-select guest deletion
 
 ### Added

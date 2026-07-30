@@ -90,6 +90,10 @@ export default {
   "rsvp.configError": "행사 정보를 불러오지 못했습니다. 새로고침해 주세요.",
   "rsvp.demoBadge": "데모 모드",
 
+  "rsvp.closed.title": "참석 회신이 마감되었습니다",
+  "rsvp.closed.body": "좌석과 식사 준비를 확정하기 위해 {date} 이후로는 회신을 받지 않습니다.",
+  "rsvp.closed.contact": "일정이 바뀌셨나요? 신랑 신부에게 직접 연락해 주시면 처리해 드립니다.",
+
   "rsvp.name.label": "성함 (전체 이름)",
   "rsvp.name.placeholder": "청첩장에 적힌 이름",
   "rsvp.name.searchPlaceholder": "이름을 입력하기 시작하세요…",
@@ -180,6 +184,7 @@ export default {
   "rsvp.err.tooManyAttempts": "PIN 시도 횟수가 너무 많습니다 — 잠시 후 다시 시도해 주세요.",
   "rsvp.err.notSetup": "참석 회신이 아직 설정되지 않았습니다 — 데이터베이스 마이그레이션이 실행되지 않았습니다. 신랑 신부에게 문의하세요.",
   "rsvp.err.linkExpired": "참석 회신 링크가 만료되었습니다. 새 링크는 신랑 신부에게 문의하세요.",
+  "rsvp.err.deadlinePassed": "참석 회신이 마감되었습니다. 변경하시려면 신랑 신부에게 직접 연락해 주세요.",
   "rsvp.err.generic": "오류가 발생했습니다 — 다시 시도하거나 신랑 신부에게 문의하세요.",
 
   // Public runsheet page (#121)

@@ -4,6 +4,7 @@ import { sendEmail, getFromAddress, missingEmailEnvVars } from "./_lib/emailProv
 import { escapeHtml, sanitizeSubject } from "./_lib/escapeHtml.js";
 import { secureCompare } from "./_lib/secureCompare.js";
 import { coupleName } from "../src/lib/coupleName.js";
+import { isRsvpLocked } from "../src/lib/rsvpDeadline.js";
 
 function toTitleCase(str) {
   return str.replace(/\w\S*/g, (w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
@@ -183,7 +184,7 @@ export default async function handler(req, res) {
   // not an error. That keeps `weddingError` meaning a genuine query failure.
   const { data: wedding, error: weddingError } = await supabase
     .from("weddings")
-    .select("bride_name, groom_name, name_order, hero_image_url, wedding_date, ceremony_time, dinner_time, venue_name, venue_address")
+    .select("bride_name, groom_name, name_order, hero_image_url, wedding_date, ceremony_time, dinner_time, venue_name, venue_address, rsvp_deadline, lock_rsvp_after_deadline, wedding_timezone")
     .limit(1)
     .maybeSingle();
   // A query failure (e.g. migrations not applied, so name_order doesn't exist)
@@ -202,7 +203,12 @@ export default async function handler(req, res) {
   const heroImageUrl = wedding.hero_image_url || "";
 
   const siteUrl = (process.env.SITE_URL || "").replace(/\/$/, "");
-  const rsvpUrl = siteUrl && guest.rsvp_token ? `${siteUrl}/rsvp?token=${guest.rsvp_token}` : "";
+  // #179: once the deadline lock is on and past, /rsvp answers this token with a
+  // closed notice — so drop the "Update RSVP" button rather than mail a dead end.
+  // Blank rsvpUrl is the existing signal updateRsvpButton already keys off.
+  const rsvpUrl = !isRsvpLocked(wedding) && siteUrl && guest.rsvp_token
+    ? `${siteUrl}/rsvp?token=${guest.rsvp_token}`
+    : "";
 
   let fromAddress;
   try {
