@@ -6,7 +6,7 @@ import QrPrintSheet from "./QrPrintSheet.jsx";
 import { buildInviteSet, inviteKey } from "../lib/eventTargeting.js";
 import { aggregateEventStats } from "../lib/eventStats.js";
 import { guestNameMatches } from "../lib/guestSearch.js";
-import { toggleId, pruneSelection, resolveDeletion } from "../lib/guestSelection.js";
+import { toggleId, pruneSelection, resolveDeletion, selectedGuests } from "../lib/guestSelection.js";
 import { buildRsvpLink } from "../lib/rsvpLink.js";
 import { Icon } from "../shared/icons.jsx";
 
@@ -225,10 +225,15 @@ export default function RsvpTab({
     });
   };
 
+  // Hand over what was *ticked*, not resolveDeletion's collapsed roots — the
+  // modal's count, copy and typed-DELETE gate all key off this list, and a
+  // ticked plus-one whose primary is also ticked would otherwise vanish from
+  // it and make a 2-row delete look like a single-guest one. deleteGuests()
+  // re-derives the roots it actually deletes.
   const deleteSelected = () => {
-    const { roots } = resolveDeletion(selected, guests);
-    if (roots.length === 0) return;
-    onBulkDelete(roots, () => setRawSelected(new Set()));
+    const picked = selectedGuests(selected, guests);
+    if (picked.length === 0) return;
+    onBulkDelete(picked, () => setRawSelected(new Set()));
   };
 
   const startEdit = (g) => {

@@ -24,6 +24,15 @@ export function pruneSelection(selectedIds, guests) {
   return new Set([...selectedIds].filter((id) => live.has(id)));
 }
 
+// The ticked guests themselves, in list order. This is what the confirmation
+// modal must count and name: it is what the admin actually picked. Do NOT use
+// resolveDeletion().roots for that — roots collapses a ticked plus-one into
+// its ticked primary, so a two-row selection would render as a single-guest
+// delete and skip the typed-DELETE gate that bulk deletes require.
+export function selectedGuests(selectedIds, guests) {
+  return guests.filter((g) => selectedIds.has(g.id));
+}
+
 // Split a selection into:
 //   roots      — the guest objects to call sb.delete() on. A selected guest
 //                whose own primary is also selected is skipped: the cascade

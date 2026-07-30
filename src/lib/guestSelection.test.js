@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { toggleId, pruneSelection, resolveDeletion } from "./guestSelection.js";
+import { toggleId, pruneSelection, resolveDeletion, selectedGuests } from "./guestSelection.js";
 
 // Primary + two plus-ones, plus an unrelated primary.
 const GUESTS = [
@@ -38,6 +38,24 @@ describe("pruneSelection", () => {
 
   it("returns an empty set for an empty selection", () => {
     expect(pruneSelection(new Set(), GUESTS).size).toBe(0);
+  });
+});
+
+describe("selectedGuests", () => {
+  it("returns the ticked guests in list order", () => {
+    expect(selectedGuests(new Set(["p2", "p1"]), GUESTS).map((g) => g.id)).toEqual(["p1", "p2"]);
+  });
+
+  it("keeps a plus-one whose primary is also ticked", () => {
+    // The confirmation modal counts what the admin *ticked*. resolveDeletion
+    // collapses this pair to one root (the cascade takes the child), and
+    // keying the modal off that count let a 2-row bulk delete render as a
+    // single-guest delete and skip the mandatory typed DELETE.
+    expect(selectedGuests(new Set(["p1", "c1"]), GUESTS).map((g) => g.id)).toEqual(["p1", "c1"]);
+  });
+
+  it("ignores ids with no matching guest", () => {
+    expect(selectedGuests(new Set(["gone"]), GUESTS)).toEqual([]);
   });
 });
 
