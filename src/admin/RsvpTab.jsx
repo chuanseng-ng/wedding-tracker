@@ -6,6 +6,7 @@ import QrPrintSheet from "./QrPrintSheet.jsx";
 import { buildInviteSet, inviteKey } from "../lib/eventTargeting.js";
 import { aggregateEventStats } from "../lib/eventStats.js";
 import { guestNameMatches } from "../lib/guestSearch.js";
+import { toggleId, pruneSelection, resolveDeletion, selectedGuests } from "../lib/guestSelection.js";
 import { buildRsvpLink } from "../lib/rsvpLink.js";
 import { Icon } from "../shared/icons.jsx";
 
@@ -86,6 +87,15 @@ const styles = `
 
   .rsvp-empty { text-align: center; padding: 48px; color: var(--brown); opacity: 0.45; font-size: 14px; }
 
+  /* Multi-select delete (#178) */
+  .rsvp-select-box { width: 16px; height: 16px; accent-color: var(--gold); cursor: pointer; flex-shrink: 0; margin: 0; }
+  .rsvp-selectall { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--brown); opacity: 0.75; cursor: pointer; user-select: none; }
+  .rsvp-bulkbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: #fdf0ee; border: 1px solid rgba(192,57,43,0.25); border-radius: var(--radius); padding: 10px 16px; }
+  .rsvp-bulkbar-count { font-size: 13px; font-weight: 600; color: #c0392b; margin-right: auto; }
+  .rsvp-bulkbar-delete { border-color: #c0392b; background: #c0392b; color: white; }
+  .rsvp-bulkbar-delete:hover { background: #a33227; }
+  .rsvp-row.selected { border-color: rgba(192,57,43,0.4); background: #fffbfa; }
+
   /* Per-event stats + warnings (#78, Phase 6) */
   .rsvp-warn-banner { background: #fff8e6; border: 1px solid rgba(201,168,76,0.4); border-radius: 10px; padding: 12px 16px; font-size: 13px; color: var(--gold-dark); }
   .rsvp-section-label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--brown); opacity: 0.7; font-weight: 600; margin-bottom: 8px; }
@@ -123,7 +133,7 @@ const styles = `
 `;
 
 export default function RsvpTab({
-  guests, onUpdate, onDelete, showToast,
+  guests, onUpdate, onDelete, onBulkDelete, showToast,
   enableSmartRsvp = false, events = [], eventRsvps = [], primaryMealEventId = null,
   onSetInvited, onBulkInvite, onSetEventResponse,
   duplicates = [], onMergeGuests, onDismissDuplicate,
@@ -136,6 +146,7 @@ export default function RsvpTab({
   const [savingId, setSavingId] = useState(null);
   const [qrTarget, setQrTarget] = useState(null); // { url, title, filename }
   const [showQrSheet, setShowQrSheet] = useState(false);
+  const [rawSelected, setRawSelected] = useState(() => new Set()); // guest ids ticked for deletion
 
   // Plus-ones (#38) are their own child guest rows. Responder stats count only
   // primaries (the invitations); headcount counts every confirmed body.
@@ -189,6 +200,41 @@ export default function RsvpTab({
     .filter((g) => statusFilter === "all" || g.rsvp_status === statusFilter)
     .filter((g) => partyFilter === "all" || (g.party || "") === partyFilter)
     .sort((a, b) => a.name.localeCompare(b.name));
+
+  // Multi-select deletion (#178). Derived, not stored: the 5s poll can drop a
+  // row out from under a live selection, and a stale id would inflate the
+  // count and produce a no-op delete.
+  const selected = pruneSelection(rawSelected, guests);
+  const { removedIds } = resolveDeletion(selected, guests);
+  // Select-all covers the *filtered* rows only — what you see is what you tick.
+  const allFilteredSelected = filtered.length > 0 && filtered.every((g) => selected.has(g.id));
+  const someFilteredSelected = filtered.some((g) => selected.has(g.id));
+
+  const toggleGuest = (id) => setRawSelected((prev) => toggleId(pruneSelection(prev, guests), id));
+
+  const toggleAllFiltered = () => {
+    setRawSelected((prev) => {
+      const next = pruneSelection(prev, guests);
+      // Recomputed from `next`, not the render closure, so two clicks batched
+      // into one update can't read a stale "all selected".
+      const allSelected = filtered.length > 0 && filtered.every((g) => next.has(g.id));
+      // Deselect only the filtered rows — a selection made under a different
+      // filter stays intact.
+      filtered.forEach((g) => (allSelected ? next.delete(g.id) : next.add(g.id)));
+      return next;
+    });
+  };
+
+  // Hand over what was *ticked*, not resolveDeletion's collapsed roots — the
+  // modal's count, copy and typed-DELETE gate all key off this list, and a
+  // ticked plus-one whose primary is also ticked would otherwise vanish from
+  // it and make a 2-row delete look like a single-guest one. deleteGuests()
+  // re-derives the roots it actually deletes.
+  const deleteSelected = () => {
+    const picked = selectedGuests(selected, guests);
+    if (picked.length === 0) return;
+    onBulkDelete(picked, () => setRawSelected(new Set()));
+  };
 
   const startEdit = (g) => {
     setEditingId(g.id);
@@ -424,10 +470,51 @@ export default function RsvpTab({
               🖨️ Print QR sheet
             </button>
           )}
+          {filtered.length > 0 && (
+            <label className="rsvp-selectall" title="Select every guest in the current filter">
+              <input
+                type="checkbox"
+                className="rsvp-select-box"
+                checked={allFilteredSelected}
+                ref={(el) => {
+                  // Partial selection reads as "some of these", not "none".
+                  if (el) el.indeterminate = someFilteredSelected && !allFilteredSelected;
+                }}
+                onChange={toggleAllFiltered}
+              />
+              Select all
+            </label>
+          )}
           <span className="rsvp-filter-count">
             {filtered.length} guest{filtered.length !== 1 ? "s" : ""}
           </span>
         </div>
+
+        {/* Bulk actions (#178) — only once something is ticked, and only if
+            the parent can act on it. Same idiom as showTargeting above: gate
+            the UI on the callback rather than defaulting it to a no-op, so a
+            caller that forgets it gets no button instead of a dead one. */}
+        {selected.size > 0 && onBulkDelete && (
+          <div className="rsvp-bulkbar">
+            <span className="rsvp-bulkbar-count">
+              {selected.size} selected
+              {removedIds.length > selected.size &&
+                ` · removes ${removedIds.length} rows with plus-ones`}
+            </span>
+            <button
+              className="rsvp-btn rsvp-bulkbar-delete"
+              onClick={deleteSelected}
+            >
+              🗑 Delete selected
+            </button>
+            <button
+              className="rsvp-btn rsvp-btn-cancel"
+              onClick={() => setRawSelected(new Set())}
+            >
+              Clear
+            </button>
+          </div>
+        )}
 
         {/* List */}
         <div className="rsvp-list">
@@ -435,8 +522,15 @@ export default function RsvpTab({
             <div className="rsvp-empty">No guests match this filter</div>
           ) : (
             filtered.map((g) => (
-              <div key={g.id} className="rsvp-row">
+              <div key={g.id} className={selected.has(g.id) ? "rsvp-row selected" : "rsvp-row"}>
                 <div className="rsvp-row-main">
+                  <input
+                    type="checkbox"
+                    className="rsvp-select-box"
+                    checked={selected.has(g.id)}
+                    onChange={() => toggleGuest(g.id)}
+                    aria-label={`Select ${g.name} for deletion`}
+                  />
                   <div className="rsvp-name-col">
                     <div className="rsvp-guest-name">{g.name}</div>
                     <div className="rsvp-guest-meta">

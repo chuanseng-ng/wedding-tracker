@@ -12,6 +12,7 @@ import { parseCSV, dedupeGuestImports, toCSV, guestImportTemplateCSV } from "../
 import { formatTime } from "../lib/format.js";
 import { coupleName, cleanNameOrder } from "../lib/coupleName.js";
 import { guestMatchesSearch } from "../lib/guestSearch.js";
+import { resolveDeletion } from "../lib/guestSelection.js";
 import { diffEvents } from "../lib/eventDiff.js";
 import { seedInviteRow } from "../lib/eventTargeting.js";
 import { Icon } from "../shared/icons.jsx";
@@ -854,7 +855,10 @@ export default function WeddingTracker() {
   const [eventRsvps, setEventRsvps] = useState([]); // guest_event_rsvps rows for the targeting grid (#78)
   const [duplicates, setDuplicates] = useState([]); // near-duplicate guest pairs awaiting review
   const [setupOpen, setSetupOpen] = useState(false);
-  const [pendingDelete, setPendingDelete] = useState(null);
+  // Always an array — one entry for a single-row delete, many for the RSVP
+  // tab's multi-select (#178). One modal serves both.
+  const [pendingDeletes, setPendingDeletes] = useState([]);
+  const [onDeleteConfirmed, setOnDeleteConfirmed] = useState(null); // caller cleanup (clear selection)
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [safeDeleteEnabled, setSafeDeleteEnabled] = useState(
     () => localStorage.getItem("safeDelete") !== "false"
@@ -1712,17 +1716,69 @@ export default function WeddingTracker() {
     setForm({ name: "", table_number: "", notes: "", party: "", is_vip: false });
   };
 
-  // Delete guest — optimistic removal with an Undo toast (no blocking native
-  // confirm(), which is jarring in mobile in-app browsers).
-  const deleteGuest = async (guest) => {
+  // Open the confirmation modal for one or more guests. `onDone` lets the
+  // caller clean up once the delete is actually confirmed (the RSVP tab clears
+  // its selection) — cancelling leaves the selection untouched.
+  const askDelete = (list, onDone) => {
+    setPendingDeletes(list);
+    // Stored in a thunk: useState would call a bare function as an updater.
+    setOnDeleteConfirmed(() => onDone || null);
+    setDeleteConfirmText("");
+    setModal("delete-confirm");
+  };
+
+  const closeDeleteModal = () => {
+    setModal(null);
+    setPendingDeletes([]);
+    setOnDeleteConfirmed(null);
+  };
+
+  const confirmDelete = () => {
+    deleteGuests(pendingDeletes);
+    if (onDeleteConfirmed) onDeleteConfirmed();
+    closeDeleteModal();
+  };
+
+  // A bulk delete always demands the typed confirmation, whatever the
+  // "Require typing DELETE" preference says — one stray click shouldn't clear
+  // a dozen guests. The preference still governs the single-guest case.
+  const deleteNeedsTyping = safeDeleteEnabled || pendingDeletes.length > 1;
+  const deleteBlocked = deleteNeedsTyping && deleteConfirmText !== "DELETE";
+  // How many rows actually leave, counting plus-ones the DB cascade takes.
+  const deleteTotalRows = pendingDeletes.length
+    ? resolveDeletion(new Set(pendingDeletes.map((g) => g.id)), guests).removedIds.length
+    : 0;
+
+  // Delete one or more guests — optimistic removal with an Undo toast (no
+  // blocking native confirm(), which is jarring in mobile in-app browsers).
+  // The RSVP tab's multi-select (#178) passes many; every other caller passes
+  // one. `roots` are the rows to actually delete: guests.primary_guest_id
+  // cascades, so a selected plus-one whose primary is also going needs no call
+  // of its own, but its id is still in removedIds so the list repaints at once.
+  const deleteGuests = async (list) => {
     setActivePopup(null);
-    setGuests((g) => g.filter((x) => x.id !== guest.id));
-    if (!isDemoMode) {
-      try {
-        await sb.delete("guests", guest.id);
-      } catch { return syncFail("Could not remove guest — check connection"); }
+    const { roots, removedIds } = resolveDeletion(new Set(list.map((g) => g.id)), guests);
+    // Nothing left to delete — another device got there first between the
+    // confirmation and the click. Say so rather than no-op silently.
+    if (roots.length === 0) {
+      if (list.length > 0) showToast("Already removed");
+      return;
     }
-    showToast(`${guest.name} removed`, () => undoDelete(guest));
+    const gone = new Set(removedIds);
+    setGuests((g) => g.filter((x) => !gone.has(x.id)));
+    if (!isDemoMode) {
+      const results = await Promise.allSettled(roots.map((g) => sb.delete("guests", g.id)));
+      // Any failure and the local list is now lying — syncFail's refetch
+      // repaints the truth, so don't offer an Undo for a delete that may not
+      // have happened.
+      if (results.some((r) => r.status === "rejected")) {
+        return syncFail("Could not remove guest — check connection");
+      }
+    }
+    const label = roots.length === 1
+      ? `${roots[0].name} removed`
+      : `${roots.length} guests removed`;
+    showToast(label, () => undoDeletes(roots));
   };
 
   // Fold a near-duplicate guest into the canonical one. Unlike every other
@@ -1784,9 +1840,16 @@ export default function WeddingTracker() {
     }
   };
 
-  // Undo a delete by re-inserting the guest (a new id is assigned by the DB).
-  const undoDelete = async (guest) => {
+  // Undo a delete by re-inserting the guests (new ids are assigned by the DB).
+  // Only the rows that were explicitly deleted come back — plus-ones the DB
+  // cascade took with a primary do not. That has always been true of the
+  // single-guest undo; the confirm modal now says so out loud (#178).
+  const undoDeletes = async (list) => {
     setToast(null);
+    for (const guest of list) await restoreGuest(guest);
+  };
+
+  const restoreGuest = async (guest) => {
     const data = {
       name: guest.name,
       table_number: guest.table_number,
@@ -2290,7 +2353,7 @@ export default function WeddingTracker() {
                       <button className="icon-btn" onClick={() => { setEditGuest(g); setForm({ name: g.name, table_number: g.table_number, notes: g.notes || "", party: g.party || "", is_vip: g.is_vip || false }); setModal("edit"); }}>
                         <Icon.Edit />
                       </button>
-                      <button className="icon-btn danger" onClick={() => { setPendingDelete(g); setDeleteConfirmText(""); setModal("delete-confirm"); }}><Icon.Trash /></button>
+                      <button className="icon-btn danger" onClick={() => { askDelete([g]); }}><Icon.Trash /></button>
                     </div>
                   )}
                 </div>
@@ -2403,7 +2466,8 @@ export default function WeddingTracker() {
             <RsvpTab
               guests={guests}
               onUpdate={updateGuest}
-              onDelete={(g) => { setPendingDelete(g); setDeleteConfirmText(""); setModal("delete-confirm"); }}
+              onDelete={(g) => askDelete([g])}
+              onBulkDelete={(list, onDone) => askDelete(list, onDone)}
               showToast={showToast}
               enableSmartRsvp={!!wedding?.enable_smart_rsvp}
               events={weddingEvents}
@@ -2675,14 +2739,37 @@ export default function WeddingTracker() {
         )}
 
         {/* DELETE GUEST CONFIRMATION */}
-        {modal === "delete-confirm" && pendingDelete && (
-          <div className="modal-overlay" onClick={() => { setModal(null); setPendingDelete(null); }}>
+        {modal === "delete-confirm" && pendingDeletes.length > 0 && (
+          <div className="modal-overlay" onClick={closeDeleteModal}>
             <div className="modal" onClick={(e) => e.stopPropagation()}>
-              <div className="modal-title">Delete Guest</div>
+              <div className="modal-title">
+                {pendingDeletes.length === 1 ? "Delete Guest" : `Delete ${pendingDeletes.length} Guests`}
+              </div>
               <p style={{ fontSize: 14, color: "var(--charcoal)", lineHeight: 1.6, marginBottom: 16 }}>
-                Permanently delete <strong>{pendingDelete.name}</strong>? This removes them from all records and cannot be undone.
+                {pendingDeletes.length === 1 ? (
+                  <>Permanently delete <strong>{pendingDeletes[0].name}</strong>? This removes them from all records and cannot be undone.</>
+                ) : (
+                  <>Permanently delete <strong>{pendingDeletes.length} guests</strong>? This removes them from all records and cannot be undone.</>
+                )}
               </p>
-              {safeDeleteEnabled && (
+              {pendingDeletes.length > 1 && (
+                <div
+                  style={{
+                    fontSize: 13, color: "var(--brown)", lineHeight: 1.6, marginBottom: 16,
+                    maxHeight: 140, overflowY: "auto", background: "var(--warm-white)",
+                    border: "1px solid rgba(201,168,76,0.2)", borderRadius: 8, padding: "10px 14px",
+                  }}
+                >
+                  {pendingDeletes.map((g) => g.name).join(", ")}
+                </div>
+              )}
+              {deleteTotalRows > pendingDeletes.length && (
+                <p style={{ fontSize: 13, color: "#c0392b", lineHeight: 1.6, marginBottom: 16 }}>
+                  Plus-ones registered by these guests go too — {deleteTotalRows} rows in total.
+                  Undo restores the guests you picked, not their plus-ones.
+                </p>
+              )}
+              {deleteNeedsTyping && (
                 <div className="form-group" style={{ marginBottom: 16 }}>
                   <label className="form-label">Type DELETE to confirm</label>
                   <input
@@ -2692,9 +2779,7 @@ export default function WeddingTracker() {
                     placeholder="DELETE"
                     autoFocus
                     onKeyDown={(e) => {
-                      if (e.key === "Enter" && deleteConfirmText === "DELETE") {
-                        deleteGuest(pendingDelete); setModal(null); setPendingDelete(null);
-                      }
+                      if (e.key === "Enter" && !deleteBlocked) confirmDelete();
                     }}
                   />
                 </div>
@@ -2703,6 +2788,9 @@ export default function WeddingTracker() {
                 <input
                   type="checkbox"
                   checked={safeDeleteEnabled}
+                  // Bulk deletes force the typed confirmation, so the toggle is
+                  // inert there — disable it rather than let it lie.
+                  disabled={pendingDeletes.length > 1}
                   onChange={(e) => {
                     setSafeDeleteEnabled(e.target.checked);
                     localStorage.setItem("safeDelete", e.target.checked ? "true" : "false");
@@ -2710,20 +2798,21 @@ export default function WeddingTracker() {
                   }}
                 />
                 Require typing DELETE
+                {pendingDeletes.length > 1 && " (always on for multiple guests)"}
               </label>
               <div className="modal-actions">
-                <button className="btn btn-outline" onClick={() => { setModal(null); setPendingDelete(null); }}>Cancel</button>
+                <button className="btn btn-outline" onClick={closeDeleteModal}>Cancel</button>
                 <button
                   className="btn"
                   style={{
                     background: "#c0392b", color: "white",
-                    opacity: safeDeleteEnabled && deleteConfirmText !== "DELETE" ? 0.4 : 1,
-                    cursor: safeDeleteEnabled && deleteConfirmText !== "DELETE" ? "not-allowed" : "pointer",
+                    opacity: deleteBlocked ? 0.4 : 1,
+                    cursor: deleteBlocked ? "not-allowed" : "pointer",
                   }}
-                  disabled={safeDeleteEnabled && deleteConfirmText !== "DELETE"}
-                  onClick={() => { deleteGuest(pendingDelete); setModal(null); setPendingDelete(null); }}
+                  disabled={deleteBlocked}
+                  onClick={confirmDelete}
                 >
-                  Delete
+                  {pendingDeletes.length === 1 ? "Delete" : `Delete ${pendingDeletes.length}`}
                 </button>
               </div>
             </div>

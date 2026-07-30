@@ -480,6 +480,18 @@ Priya Nair,2,,false,bride
 
 > **Duplicates are skipped:** re-importing a file is safe. Rows whose name already exists in your guest list — or repeats within the same file — are skipped (names are compared case-insensitively, ignoring surrounding spaces), and the import toast tells you how many duplicates were skipped.
 
+### Removing several guests at once
+
+Planning → **RSVP** tab: each row has a tick-box, and **Select all** ticks everything in the
+current filter (so you can search or filter to "declined" first and clear just those). A red bar
+appears above the list with the count and a **Delete selected** button. The confirmation always
+requires you to type `DELETE` when more than one guest is selected, whatever the *Require typing
+DELETE* preference says.
+
+Plus-ones a guest registered are deleted with them and are counted in the confirmation, so the
+number you see is the number of rows that actually disappear. **Undo** on the toast restores the
+guests you picked — not their plus-ones, which have to be re-added by hand.
+
 ---
 
 ## 7. Workflow
