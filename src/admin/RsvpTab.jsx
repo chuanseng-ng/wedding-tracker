@@ -490,8 +490,11 @@ export default function RsvpTab({
           </span>
         </div>
 
-        {/* Bulk actions (#178) — only once something is ticked. */}
-        {selected.size > 0 && (
+        {/* Bulk actions (#178) — only once something is ticked, and only if
+            the parent can act on it. Same idiom as showTargeting above: gate
+            the UI on the callback rather than defaulting it to a no-op, so a
+            caller that forgets it gets no button instead of a dead one. */}
+        {selected.size > 0 && onBulkDelete && (
           <div className="rsvp-bulkbar">
             <span className="rsvp-bulkbar-count">
               {selected.size} selected
