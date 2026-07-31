@@ -16,7 +16,7 @@
 -- otherwise a UTC-hosted deployment locks a UTC-5 couple's guests out five hours
 -- early. Mirrored in JS by src/lib/rsvpDeadline.js (isRsvpLocked).
 --
--- Idempotent: guarded column adds, guarded constraint, functions dropped and
+-- Idempotent: guarded column adds, functions dropped and
 -- recreated. submit_rsvp / submit_rsvp_events / register_open_rsvp are reproduced
 -- in full from 0002 / 0004 / 0008 with only the guard added — Postgres has no way
 -- to patch a function body. A later consolidation round folds them back.
@@ -578,8 +578,8 @@ security definer
 set search_path = public
 as $$
 declare
-  -- An unknown zone is clamped rather than allowed to trip weddings_timezone_check:
-  -- a stale client must not be able to fail the couple's whole page save.
+  -- An unknown zone is clamped rather than stored as-is: a stale client must not
+  -- be able to poison the setting, nor to fail the couple's whole page save.
   v_tz text := case
     when exists (select 1 from pg_timezone_names z where z.name = p_wedding_timezone)
       then p_wedding_timezone

@@ -53,19 +53,32 @@ export const TIMEZONE_OPTIONS = (() => {
 
 /**
  * The calendar date (YYYY-MM-DD) at `date` as seen in `timeZone`.
- * "en-CA" formats as YYYY-MM-DD natively, so no re-assembly is needed.
+ *
+ * Assembled from formatToParts rather than trusting a locale to render ISO:
+ * ECMA-402 does not pin any locale's output shape, so a small-ICU build could
+ * hand back "01/11/2026" and silently invert the string comparison this feeds.
+ * The parts are locale-independent, so "en-CA" here only picks the calendar.
+ *
  * An unknown zone makes Intl throw RangeError — fall back rather than crash the
  * public form over a bad admin value.
  */
 export function zonedDateISO(date = new Date(), timeZone = DEFAULT_TIMEZONE) {
   const zone = String(timeZone || "").trim() || DEFAULT_TIMEZONE;
   try {
-    return new Intl.DateTimeFormat("en-CA", {
+    const parts = new Intl.DateTimeFormat("en-CA", {
       timeZone: zone,
       year: "numeric",
       month: "2-digit",
       day: "2-digit",
-    }).format(date);
+    }).formatToParts(date);
+    const get = (type) => parts.find((p) => p.type === type)?.value ?? "";
+    const y = get("year").padStart(4, "0");
+    const m = get("month").padStart(2, "0");
+    const d = get("day").padStart(2, "0");
+    if (!get("year") || !get("month") || !get("day")) {
+      throw new Error("incomplete date parts");
+    }
+    return `${y}-${m}-${d}`;
   } catch {
     if (zone === DEFAULT_TIMEZONE) throw new Error("default timezone unavailable");
     return zonedDateISO(date, DEFAULT_TIMEZONE);

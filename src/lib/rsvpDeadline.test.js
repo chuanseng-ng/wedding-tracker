@@ -22,6 +22,27 @@ describe("zonedDateISO", () => {
     expect(zonedDateISO(new Date("2026-01-05T12:00:00Z"), "UTC")).toBe("2026-01-05");
   });
 
+  it("assembles from parts rather than trusting the locale's date shape", () => {
+    // ECMA-402 does not pin a locale's output format, so the value must not come
+    // from .format(). Simulate a build whose en-CA renders day-first: the result
+    // must still be ISO, because it is built from formatToParts.
+    const RealDTF = Intl.DateTimeFormat;
+    const spy = function (locale, opts) {
+      const inner = new RealDTF(locale, opts);
+      return {
+        format: () => "05/01/2026",
+        formatToParts: (d) => inner.formatToParts(d),
+        resolvedOptions: () => inner.resolvedOptions(),
+      };
+    };
+    Intl.DateTimeFormat = spy;
+    try {
+      expect(zonedDateISO(new Date("2026-01-05T12:00:00Z"), "UTC")).toBe("2026-01-05");
+    } finally {
+      Intl.DateTimeFormat = RealDTF;
+    }
+  });
+
   it("falls back to the default zone when the timezone is unknown or blank", () => {
     const expected = zonedDateISO(CROSS_MIDNIGHT, DEFAULT_TIMEZONE);
     expect(zonedDateISO(CROSS_MIDNIGHT, "Not/AZone")).toBe(expected);

@@ -731,7 +731,15 @@ export default function WeddingPageTab({ wedding, onSave, showToast }) {
                     value={weddingTimezone}
                     onChange={(e) => setWeddingTimezone(e.target.value)}
                   >
-                    {TIMEZONE_OPTIONS.map((tz) => (
+                    {/* upsert_wedding_page validates against pg_timezone_names,
+                        which accepts IANA aliases (US/Pacific, Australia/Canberra)
+                        that Intl.supportedValuesOf omits. Without this the stored
+                        zone would render as a blank selection and the next save
+                        would silently rewrite a zone the couple never changed. */}
+                    {(TIMEZONE_OPTIONS.includes(weddingTimezone)
+                      ? TIMEZONE_OPTIONS
+                      : [weddingTimezone, ...TIMEZONE_OPTIONS]
+                    ).map((tz) => (
                       <option key={tz} value={tz}>{tz}</option>
                     ))}
                   </select>
