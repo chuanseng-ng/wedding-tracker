@@ -16,6 +16,16 @@ updates:
           - "react-dom"
           - "@types/react"
           - "@types/react-dom"
+      # api/_lib/photoStorage/r2.js passes an @aws-sdk/client-s3 command straight to
+      # getSignedUrl() from @aws-sdk/s3-request-presigner. AWS cuts the whole
+      # @aws-sdk/* family from one release train, but they reach the shared signing
+      # internals through loose "^" ranges, so npm accepts a split pair — and the
+      # break only shows up server-side, on a real guest upload. They drifted to
+      # 3.1096.0 / 3.1091.0 while ungrouped. src/lib/awsSdkVersions.test.js is the
+      # backstop.
+      aws-sdk:
+        patterns:
+          - "@aws-sdk/*"
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
