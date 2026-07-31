@@ -90,6 +90,10 @@ export default {
   "rsvp.configError": "イベントの詳細を読み込めませんでした。再読み込みしてください。",
   "rsvp.demoBadge": "デモモード",
 
+  "rsvp.closed.title": "出欠登録は締め切りました",
+  "rsvp.closed.body": "座席とお料理を確定するため、{date} をもって回答の受付を終了いたしました。",
+  "rsvp.closed.contact": "ご都合が変わりましたか？新郎新婦に直接ご連絡ください。対応いたします。",
+
   "rsvp.name.label": "お名前（フルネーム）",
   "rsvp.name.placeholder": "招待状に記載のお名前",
   "rsvp.name.searchPlaceholder": "お名前を入力してください…",
@@ -180,6 +184,7 @@ export default {
   "rsvp.err.tooManyAttempts": "PINの入力回数が多すぎます — しばらくしてからもう一度お試しください。",
   "rsvp.err.notSetup": "出欠登録はまだ設定されていません — データベースの移行が実行されていません。新郎新婦にご連絡ください。",
   "rsvp.err.linkExpired": "出欠登録リンクの有効期限が切れました。新しいリンクについては新郎新婦にご連絡ください。",
+  "rsvp.err.deadlinePassed": "出欠登録は締め切りました。変更をご希望の場合は新郎新婦に直接ご連絡ください。",
   "rsvp.err.generic": "エラーが発生しました — もう一度お試しいただくか、新郎新婦にご連絡ください。",
 
   // Public runsheet page (#121)

@@ -1332,6 +1332,8 @@ export default function WeddingTracker() {
         p_content_translations: form.content_translations,
         p_theme_tokens:   form.theme_tokens,
         p_section_photos: form.section_photos,
+        p_lock_rsvp_after_deadline: form.lock_rsvp_after_deadline,
+        p_wedding_timezone: form.wedding_timezone,
       });
       await loadWedding();
       showToast("Wedding page saved");

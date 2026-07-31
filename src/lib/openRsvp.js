@@ -30,5 +30,8 @@ export const openRsvpErrorKey = (message) => {
   }
   if (msg.includes("invalid rsvp token")) return "rsvp.err.linkExpired";
   if (msg.includes("invalid rsvp pin")) return "rsvp.err.pinInvalid";
+  // #179: the deadline passed between the page load and the submit — the page
+  // renders a closed notice up front, so this only catches a stale open tab.
+  if (msg.includes("rsvp closed")) return "rsvp.err.deadlinePassed";
   return "rsvp.err.generic";
 };

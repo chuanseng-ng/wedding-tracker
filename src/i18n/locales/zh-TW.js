@@ -90,6 +90,10 @@ export default {
   "rsvp.configError": "無法載入活動詳情，請嘗試重新整理。",
   "rsvp.demoBadge": "示範模式",
 
+  "rsvp.closed.title": "回覆已截止",
+  "rsvp.closed.body": "{date} 之後我們便停止收取回覆，以便確認座位安排與餐飲人數。",
+  "rsvp.closed.contact": "行程有變？請直接聯絡新人，他們會為您處理。",
+
   "rsvp.name.label": "您的全名",
   "rsvp.name.placeholder": "請填寫邀請函上的名字",
   "rsvp.name.searchPlaceholder": "開始輸入您的名字…",
@@ -179,6 +183,7 @@ export default {
   "rsvp.err.tooManyAttempts": "密碼嘗試次數過多 — 請稍後再試。",
   "rsvp.err.notSetup": "回覆功能尚未設定 — 資料庫尚未完成遷移，請聯絡新人。",
   "rsvp.err.linkExpired": "您的回覆連結已失效，請聯絡新人取得新連結。",
+  "rsvp.err.deadlinePassed": "回覆已截止，如需更改請直接聯絡新人。",
   "rsvp.err.generic": "發生錯誤，請再試一次或聯絡新人。",
 
   // Public runsheet page (#121)
