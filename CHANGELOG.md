@@ -5,6 +5,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [2026-08-01] — The AWS SDK packages had drifted apart
+
+### Fixed
+
+- **`@aws-sdk/client-s3` and `@aws-sdk/s3-request-presigner` were two releases apart** — 3.1096.0 against 3.1091.0 — and had been for a while. [`api/_lib/photoStorage/r2.js`](api/_lib/photoStorage/r2.js) builds a command with the client and hands it to `getSignedUrl()` from the presigner, so both walk the same signing middleware; AWS cuts the entire `@aws-sdk/*` family from one release train, but each package reaches the shared internals (`@aws-sdk/core`, `@aws-sdk/signature-v4-multi-region`) through loose `^` ranges, so npm installs a split pair without complaint. Same shape as the react/react-dom break two days ago, and quieter: the R2 path only runs server-side with real credentials, so a bad presigned URL would have surfaced as a guest photo upload failing in production, not as a red test. Both are now `^3.1100.0`.
+- **CI still had no way to notice.** `npm ci`, lint, the Vitest suite, `vite build` and `scripts/security-audit.mjs` are all green on a mismatched pair. [`src/lib/awsSdkVersions.test.js`](src/lib/awsSdkVersions.test.js) now asserts the two resolve to the same version, mirroring `reactVersions.test.js`.
+
+### Changed
+
+- **`.github/dependabot.yml` groups `@aws-sdk/*`** into a single PR, so no AWS package can be bumped on its own again — the wildcard covers any future `@aws-sdk/*` dependency, not just the two in use today. The unit test above is the backstop if the grouping is ever dropped. This supersedes the open Dependabot PR bumping `client-s3` alone to 3.1098.0.
+
+---
+
 ## [2026-07-31] — RSVP closes after the deadline
 
 ### Added
