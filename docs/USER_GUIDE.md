@@ -480,6 +480,18 @@ Priya Nair,2,,false,bride
 
 > **Duplicates are skipped:** re-importing a file is safe. Rows whose name already exists in your guest list — or repeats within the same file — are skipped (names are compared case-insensitively, ignoring surrounding spaces), and the import toast tells you how many duplicates were skipped.
 
+### Removing several guests at once
+
+Planning → **RSVP** tab: each row has a tick-box, and **Select all** ticks everything in the
+current filter (so you can search or filter to "declined" first and clear just those). A red bar
+appears above the list with the count and a **Delete selected** button. The confirmation always
+requires you to type `DELETE` when more than one guest is selected, whatever the *Require typing
+DELETE* preference says.
+
+Plus-ones a guest registered are deleted with them and are counted in the confirmation, so the
+number you see is the number of rows that actually disappear. **Undo** on the toast restores the
+guests you picked — not their plus-ones, which have to be re-added by hand.
+
 ---
 
 ## 7. Workflow
@@ -505,6 +517,7 @@ Priya Nair,2,,false,bride
    - Each guest row has a **🔗 Link** button that copies their *personalised* pre-filled RSVP link, and a **▦ QR** button that shows it as a QR code
    - Sending physical invitations? Click **🖨️ Print QR sheet** for a printable grid with one personalised QR card per guest (plus a generic card for anyone else) — cut them out and slip one into each envelope
 4. Guests fill in the RSVP form — responses appear in the **RSVP tab** in real time
+   - Optional: **Close RSVP after the deadline** (Wedding Page, right under **RSVP Deadline** — it only appears once a deadline is set). Off by default, in which case the deadline is only a printed suggestion and guests can keep changing their answer after you've arranged seating. Switch it on and, from the day *after* the deadline, guests see a notice asking them to contact you instead of the form, and the database itself refuses every RSVP submission — including open-RSVP self-registrations. The deadline day itself is inclusive, so guests get all of it. **Deadline Timezone** (shown when the toggle is on) decides when that day ends; leave it on `Asia/Singapore` unless your guests are elsewhere. Confirmation and reminder emails drop their *Update RSVP* button while the lock is active rather than linking to a form that will refuse. You can still add and edit any guest's response yourself from the **RSVP tab** — the lock only applies to guests. Requires the `0011_rsvp_deadline_lock` migration.
 5. Once RSVPs are in, open the **Seating Plan tab** to assign confirmed guests to tables
 6. Export the seating plan as CSV or print it
 

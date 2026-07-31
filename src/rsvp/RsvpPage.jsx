@@ -9,11 +9,12 @@ import { localizeEvents } from "../lib/eventLocalize.js";
 import { buildEventResponses, declineAllResponses, hydrateEventState, primaryAnsweredAllEvents } from "../lib/rsvpFormPayload.js";
 import { visibleEventsFor } from "../lib/eventVisibility.js";
 import { MAX_PIN, cleanPin, isOpenMode, openRsvpErrorKey, registerResultErrorKey } from "../lib/openRsvp.js";
+import { isRsvpLocked } from "../lib/rsvpDeadline.js";
 import { sanitizeThemeTokens, isCompleteThemeTokens, themeTokenStyle } from "../lib/themeTokens.js";
 import { coupleName, partyOrder } from "../lib/coupleName.js";
 import { buildIcsDataUrl } from "./buildIcs.js";
 import LanguageSwitcher from "../i18n/LanguageSwitcher.jsx";
-import { Heart, EnvelopeSimple } from "@phosphor-icons/react";
+import { Heart, EnvelopeSimple, LockSimple } from "@phosphor-icons/react";
 
 const MEAL_OPTIONS = [
   { value: "Halal", labelKey: "rsvp.meal.Halal" },
@@ -309,6 +310,28 @@ function ConfirmationView({ name, attending, wedding }) {
   );
 }
 
+// #179: shown INSTEAD of the form once the couple's deadline has passed, so
+// there is no disabled form to work around and nothing to dismiss. The database
+// refuses the write regardless (public.is_rsvp_locked) — this is the courteous
+// half of the same rule, pointing the guest at the couple.
+function RsvpClosedNotice({ deadline }) {
+  const { t, locale } = useLocale();
+  const dtLocale = locale === "zh-TW" ? "zh-TW" : "en-GB";
+  const date = deadline ? formatDate(deadline, dtLocale) : null;
+  return (
+    <div className="rsvp-confirm">
+      <div className="rsvp-confirm-heart">
+        <LockSimple size={56} color="var(--brown)" weight="light" />
+      </div>
+      <div className="rsvp-confirm-title">{t("rsvp.closed.title")}</div>
+      {date && <div className="rsvp-confirm-msg">{t("rsvp.closed.body", { date })}</div>}
+      <div className="rsvp-confirm-msg" style={{ marginTop: date ? 12 : 0 }}>
+        {t("rsvp.closed.contact")}
+      </div>
+    </div>
+  );
+}
+
 function formatDate(dateStr, dtLocale = "en-GB") {
   if (!dateStr) return null;
   const [y, m, d] = dateStr.split("-").map(Number);
@@ -390,6 +413,13 @@ export default function RsvpPage() {
   // (register_open_rsvp), gated by a mandatory PIN. A token link still wins.
   const openMode = isOpenMode({ wedding, isDemoMode, activeToken });
   const [pin, setPin] = useState("");
+
+  // Deadline lock (#179). get_wedding_config serves a server-COMPUTED rsvp_locked,
+  // and isRsvpLocked prefers it, so this page and the RPC that will accept or
+  // refuse the submit can never disagree. Falls back to local date math only in
+  // demo mode / on a database that has not run migration 0011 (where the RPCs
+  // carry no guard either, so "open" is the right answer).
+  const rsvpLocked = isRsvpLocked(wedding);
 
   // Smart RSVP (#78): per-event attendance. `invitedEvents` comes from the token
   // lookup (empty unless the couple enabled smart RSVP and invited this guest).
@@ -525,6 +555,10 @@ export default function RsvpPage() {
 
   const submit = async (e) => {
     e.preventDefault();
+    // Only reachable from a tab left open across the cutoff — the form is not
+    // rendered once locked. The RPC refuses too; this just gives a kind message
+    // instead of a round trip.
+    if (rsvpLocked) { setError(t("rsvp.err.deadlinePassed")); return; }
     if (!isDemoMode && !activeToken && !openMode) {
       setError(t("rsvp.err.nameSelect"));
       return;
@@ -655,6 +689,10 @@ export default function RsvpPage() {
                 : attending}
               wedding={w}
             />
+          ) : rsvpLocked ? (
+            // After `done` on purpose: a guest who submitted just before the
+            // cutoff still sees their confirmation, not a shut door.
+            <RsvpClosedNotice deadline={wedding?.rsvp_deadline} />
           ) : (
             <form onSubmit={submit}>
               {isDemoMode && <div className="demo-badge">{t("rsvp.demoBadge")}</div>}

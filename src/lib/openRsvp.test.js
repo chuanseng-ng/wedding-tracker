@@ -52,6 +52,12 @@ describe("openRsvpErrorKey", () => {
     expect(openRsvpErrorKey("PGRST202: not found")).toBe("rsvp.err.notSetup");
   });
 
+  it("maps the deadline lock to the deadline-passed key (#179)", () => {
+    expect(openRsvpErrorKey("rsvp closed")).toBe("rsvp.err.deadlinePassed");
+    // Postgres prefixes the raise with its own context in some clients.
+    expect(openRsvpErrorKey('P0001: rsvp closed')).toBe("rsvp.err.deadlinePassed");
+  });
+
   it("maps an invalid token to the link-expired key", () => {
     expect(openRsvpErrorKey("invalid rsvp token")).toBe("rsvp.err.linkExpired");
   });

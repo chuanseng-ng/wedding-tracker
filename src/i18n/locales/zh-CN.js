@@ -90,6 +90,10 @@ export default {
   "rsvp.configError": "无法加载活动详情，请尝试刷新。",
   "rsvp.demoBadge": "演示模式",
 
+  "rsvp.closed.title": "回复已截止",
+  "rsvp.closed.body": "{date} 之后我们便停止收取回复，以便确认座位安排与餐饮人数。",
+  "rsvp.closed.contact": "行程有变？请直接联系新人，他们会为您处理。",
+
   "rsvp.name.label": "您的全名",
   "rsvp.name.placeholder": "请填写请柬上的名字",
   "rsvp.name.searchPlaceholder": "开始输入您的名字…",
@@ -180,6 +184,7 @@ export default {
   "rsvp.err.tooManyAttempts": "密码尝试次数过多 — 请稍后再试。",
   "rsvp.err.notSetup": "回复功能尚未设置 — 数据库尚未完成迁移，请联系新人。",
   "rsvp.err.linkExpired": "您的回复链接已失效，请联系新人获取新链接。",
+  "rsvp.err.deadlinePassed": "回复已截止，如需更改请直接联系新人。",
   "rsvp.err.generic": "发生错误，请再试一次或联系新人。",
 
   // Public runsheet page (#121)

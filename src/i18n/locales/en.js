@@ -91,6 +91,12 @@ export default {
   "rsvp.configError": "Could not load event details — please try refreshing.",
   "rsvp.demoBadge": "Demo Mode",
 
+  // Deadline lock (#179) — shown instead of the form once the couple's RSVP
+  // deadline has passed and they enabled the lock.
+  "rsvp.closed.title": "RSVP is now closed",
+  "rsvp.closed.body": "We stopped taking responses after {date} so we could finalise the seating and catering.",
+  "rsvp.closed.contact": "Plans changed? Please contact the couple directly and they'll sort it out for you.",
+
   "rsvp.name.label": "Your Full Name",
   "rsvp.name.placeholder": "As written on your invitation",
   "rsvp.name.searchPlaceholder": "Start typing your name…",
@@ -185,6 +191,7 @@ export default {
   "rsvp.err.tooManyAttempts": "Too many PIN attempts — please try again in a little while.",
   "rsvp.err.notSetup": "RSVP is not set up yet — the database migration hasn't been run. Contact the couple.",
   "rsvp.err.linkExpired": "Your RSVP link has expired. Please contact the couple for a new link.",
+  "rsvp.err.deadlinePassed": "RSVP has closed — please contact the couple directly to change your response.",
   "rsvp.err.generic": "Something went wrong — please try again or contact the couple.",
 
   // Public runsheet page (#121)

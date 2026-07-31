@@ -90,6 +90,10 @@ export default {
   "rsvp.configError": "Tidak dapat memuatkan butiran acara — sila cuba muat semula.",
   "rsvp.demoBadge": "Mod Demo",
 
+  "rsvp.closed.title": "RSVP telah ditutup",
+  "rsvp.closed.body": "Kami berhenti menerima jawapan selepas {date} supaya susunan tempat duduk dan katering dapat dimuktamadkan.",
+  "rsvp.closed.contact": "Rancangan berubah? Sila hubungi pasangan pengantin terus dan mereka akan menguruskannya untuk anda.",
+
   "rsvp.name.label": "Nama Penuh Anda",
   "rsvp.name.placeholder": "Seperti tertulis pada jemputan anda",
   "rsvp.name.searchPlaceholder": "Mula taip nama anda…",
@@ -180,6 +184,7 @@ export default {
   "rsvp.err.tooManyAttempts": "Terlalu banyak percubaan PIN — sila cuba lagi sebentar nanti.",
   "rsvp.err.notSetup": "RSVP belum disediakan — migrasi pangkalan data belum dijalankan. Hubungi pasangan pengantin.",
   "rsvp.err.linkExpired": "Pautan RSVP anda telah tamat tempoh. Sila hubungi pasangan pengantin untuk pautan baharu.",
+  "rsvp.err.deadlinePassed": "RSVP telah ditutup — sila hubungi pasangan pengantin terus untuk menukar jawapan anda.",
   "rsvp.err.generic": "Sesuatu tidak kena — sila cuba lagi atau hubungi pasangan pengantin.",
 
   // Public runsheet page (#121)

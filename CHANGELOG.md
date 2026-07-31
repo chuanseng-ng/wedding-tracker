@@ -5,6 +5,35 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [2026-07-31] — RSVP closes after the deadline
+
+### Added
+
+- **An opt-in lock that actually enforces the RSVP deadline** ([#179](https://github.com/shangweisong/wedding-tracker/issues/179)). `weddings.rsvp_deadline` has been decorative since it was added: the public page printed "RSVP by 31 Oct" and nothing stopped a guest submitting — or quietly *changing* — an answer afterwards, so seating and catering could shift under the couple after they had been finalised. **Close RSVP after the deadline** now sits directly under the deadline date in the Wedding Page tab (it only appears once a deadline is set). With it on, the day after the deadline the public form is replaced by a notice asking guests to contact the couple, and all three anon-facing write RPCs — `submit_rsvp`, `submit_rsvp_events` and `register_open_rsvp` — refuse with `rsvp closed`. Enforcement is in the database, not just the UI: the public anon key can call those RPCs directly. Default off, so every existing deployment behaves exactly as before.
+- **`weddings.wedding_timezone`** (IANA, default `Asia/Singapore`), picked beside the toggle. `rsvp_deadline` is a bare `date`, so "the deadline has passed" is a calendar question — resolving it against the server's UTC clock would lock a UTC-5 couple's guests out five hours early on the deadline day. The deadline day itself is inclusive: locking begins at local midnight after it. New pure helper [`src/lib/rsvpDeadline.js`](src/lib/rsvpDeadline.js) mirrors the SQL, and `public.is_rsvp_locked()` fails open (no row, no deadline, or the flag off ⇒ open) so a misconfigured deployment can never silently shut its own form.
+
+### Changed
+
+- `get_wedding_config` appends `lock_rsvp_after_deadline`, `wedding_timezone` and a server-**computed** `rsvp_locked`. The form renders from `rsvp_locked` rather than doing its own date math, so the page and the RPC that will accept or refuse the submit cannot disagree about whether RSVP is open. Clients read this row positionally, so the three columns are append-only.
+- Confirmation, decline and 30-day reminder emails drop their **Update RSVP** button while the lock is active rather than linking guests to a form that will refuse them (`api/send-rsvp-email.js`, `api/send-reminders.js`). The reminders themselves still send — they go to *confirmed* guests and carry venue and timing details, not RSVP chase-ups.
+- Couple and helper edits to guest RSVPs are untouched: they write to the `guests` table directly and never pass through the guarded RPCs.
+
+---
+
+## [2026-07-30] — Multi-select guest deletion
+
+### Added
+
+- **Tick-boxes on the RSVP tab's guest list, and one confirmed action to delete them all** ([#178](https://github.com/shangweisong/wedding-tracker/issues/178)). Clearing a long guest list one row at a time was slow. Each row now has a checkbox, **Select all** covers the rows in the *current* filter (so search / status / party narrow the selection first), and a bar above the list shows the count with **Delete selected** and **Clear**. The selection is derived through `pruneSelection` on every render, so the 5s poll dropping a row out from under a live selection can't leave a stale id behind to inflate the count or fire a no-op delete.
+- Deletion accounts for plus-ones. `guests.primary_guest_id` is `on delete cascade`, so removing a primary silently removes the party they registered. [`src/lib/guestSelection.js`](src/lib/guestSelection.js) `resolveDeletion()` splits a selection into the rows to actually call `sb.delete` on (a selected plus-one whose primary is also going needs no call of its own) and every row that will disappear — the second number is what the confirmation modal shows, so "Delete 3" never quietly removes 5. The modal spells out that **Undo restores the guests you picked, not their cascade-deleted plus-ones** — always true of the single-guest undo, now said out loud.
+
+### Changed
+
+- **A bulk delete always demands the typed `DELETE`**, regardless of the *Require typing DELETE* preference (the toggle is disabled and labelled "always on for multiple guests" in that case). One stray click shouldn't clear a dozen guests. The single-guest flow is unchanged and still governed by the preference.
+- `deleteGuest` / `undoDelete` in `AdminApp.jsx` became `deleteGuests(list)` / `undoDeletes(list)` over a shared `restoreGuest`, and `pendingDelete` became the array `pendingDeletes` — one confirmation modal now serves both the D-Day single-row delete and the RSVP tab's multi-select. Deletes are issued with `Promise.allSettled`; if any rejects, the existing `syncFail` refetch repaints the truth and no Undo is offered for a delete that may not have happened.
+
+---
+
 ## [2026-07-29] — White blank page: react / react-dom version mismatch
 
 ### Added
