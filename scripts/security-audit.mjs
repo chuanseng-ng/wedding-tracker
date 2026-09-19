@@ -15,17 +15,9 @@
 import { execSync } from "node:child_process";
 
 // GHSA id → why it is safe to ignore here. Keep this list short and honest.
-const ALLOWLIST = {
-  // react-router / react-router-dom "RSC Mode CSRF Bypass" (GHSA-qwww-vcr4-c8h2).
-  // The flaw only affects apps using react-router's unstable React Server
-  // Components APIs. This is a client-side SPA rendered with <BrowserRouter>
-  // (src/main.jsx) and uses none of the RSC/data-router APIs, so it is not
-  // exploitable here. There is no patched 7.x; the only fix is a major upgrade
-  // to react-router v8.3.0. Revisit before adopting ANY unstable RSC/data-router
-  // APIs (which would make it apply even on 7.x) or migrating to react-router v8.
-  "GHSA-qwww-vcr4-c8h2":
-    "react-router RSC-mode CSRF; not exploitable in a <BrowserRouter> SPA (no RSC APIs). No 7.x fix — revisit before adopting unstable RSC APIs or upgrading to v8.",
-};
+// Empty is the healthy state: every high/critical advisory is currently fixed in
+// the dependency tree rather than suppressed.
+const ALLOWLIST = {};
 
 const BLOCKING = new Set(["high", "critical"]);
 
