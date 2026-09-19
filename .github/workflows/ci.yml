@@ -4,6 +4,15 @@ on:
   push:
     branches: [main, "claude/**"]
   pull_request:
+  # The audit gate below queries the LIVE advisory DB, so main is only re-audited
+  # when something is pushed to it. A newly published high advisory therefore
+  # reddens every open PR while main still shows green — six Dependabot PRs sat
+  # broken on advisories main had picked up weeks earlier. Re-run weekly so the
+  # gate fails on main first, on Monday, ahead of Dependabot's Tuesday run.
+  schedule:
+    - cron: "17 6 * * 1"
+  # Lets a maintainer re-audit main on demand without an empty push.
+  workflow_dispatch:
 
 jobs:
   build:
